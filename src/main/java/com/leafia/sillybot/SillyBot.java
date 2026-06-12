@@ -89,7 +89,7 @@ public class SillyBot {
 										"\n**Oh and don't forget to enable output on your battery socket. I'd cry if you forget to do that while reaching this far.**" +
 										"\n\n## Automatic cable conversion" +
 										"\nAlternatively, you can enable autoCableConversion in hbm.cfg to make cables from NTM also transfer RF. (see picture 4)" +
-										"\nYou can find this file under hbm/config folder in your Minecraft installation folder." +
+										"\nYou can find this file under config/hbm folder in your Minecraft installation folder." +
 										"\n\nHope this helps!"
 								)
 								.addFiles(
