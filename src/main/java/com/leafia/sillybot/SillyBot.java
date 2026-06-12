@@ -127,7 +127,7 @@ public class SillyBot {
 		return false;
 	}
 	public static boolean containsRegex(String s,String w) {
-		return (" "+s.toLowerCase()+" ").matches(".*\\s"+w+"\\s.*");
+		return (" "+s.toLowerCase()+" ").matches(".*\\W"+w+"\\W.*");
 	}
 	static void main(String[] args) {
 		try {
