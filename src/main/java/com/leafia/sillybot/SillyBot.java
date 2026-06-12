@@ -37,19 +37,11 @@ public class SillyBot {
 		String name = server.getName();
 		if (name.equalsIgnoreCase("silly bot development"))
 			return ServerType.DEVELOPMENT;
+		if (name.equalsIgnoreCase("warfactory official"))
+			return ServerType.WARFACTORY;
 		return ServerType.UNKNOWN;
 	}
 	public static class SillyListener extends ListenerAdapter {
-		@Override
-		public void onGenericThread(GenericThreadEvent event) {
-			getServerType(event.getGuild());
-		}
-
-		@Override
-		public void onGenericMessage(GenericMessageEvent event) {
-			System.out.println("AAAAAAAAAAAAAAAAAHHH");
-		}
-
 		@Override
 		public void onMessageReceived(MessageReceivedEvent event) {
 			if (event.getAuthor().equals(self)) return;
@@ -109,10 +101,6 @@ public class SillyBot {
 								.build()
 				).queue();
 			}
-		}
-
-		@Override
-		public void onChannelCreate(ChannelCreateEvent event) {
 		}
 	}
 	public static FileUpload getUpload(String resource) {
