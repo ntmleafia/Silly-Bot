@@ -86,6 +86,7 @@ public class SillyBot {
 										"\nFor this to work, the cable must be set to Pull connection type. (see picture 3)" +
 										"\n\nI don't know much about other mods, but for example with cables from Thermal series you would need a servo, and so on." +
 										"\nIf the mod has no feature to make the cable explicitly pull energy from connected devices, well, you're doomed." +
+										"\n*Applied Energistics 2 uses it's own power system by the way, so this does not work. you have to convert to RF first*" +
 										"\n**Oh and don't forget to enable output on your battery socket. I'd cry if you forget to do that while reaching this far.**" +
 										"\n\n## Automatic cable conversion" +
 										"\nAlternatively, you can enable autoCableConversion in hbm.cfg to make cables from NTM also transfer RF. (see picture 4)" +
