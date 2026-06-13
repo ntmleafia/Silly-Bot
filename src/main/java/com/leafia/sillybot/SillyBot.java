@@ -110,8 +110,10 @@ public class SillyBot {
 				if (ref == null)
 					chan.sendMessage("you have to reply to a message containing logs").queue();
 				else {
-					if (System.currentTimeMillis() < lastCommandUse+10000)
+					if (System.currentTimeMillis() < lastCommandUse+10000) {
 						chan.sendMessage("I can't keep up! ("+((lastCommandUse+10000-System.currentTimeMillis())/1000)+"s left)").queue();
+						return;
+					}
 					lastCommandUse = System.currentTimeMillis();
 					tryQuickScan(data,ref,chan,true,true);
 				}
@@ -154,7 +156,7 @@ public class SillyBot {
 				chan.sendMessage("that message ain't logs!").queue();
 			return false;
 		}
-		public static final Pattern modListPattern = Pattern.compile(".*\\|\\s*LC\\w*\\s*\\|\\s*(\\w+)\\s*\\|\\s*(\\S*)\\s*\\|.*\\|.*\\|.*");
+		public static final Pattern modListPattern = Pattern.compile(".*\\|\\s*L\\w*\\s*\\|\\s*(\\w+)\\s*\\|\\s*(\\S*)\\s*\\|.*\\|.*");
 		public static boolean diagnoseLog(String url,Message data,MessageChannel chan,boolean wasForced,boolean shouldSendSuccessMessage) {
 			//System.out.println("Diagnosing link "+url);
 			List<String> lines = readFromURL(url);
@@ -227,6 +229,9 @@ public class SillyBot {
 				}
 				if (prefix.isEmpty() && shouldSendSuccessMessage)
 					chan.sendMessage(MessageCreateData.fromContent("I did a quick scan for common causes, couldn't find any issues there")).queue();
+			} else {
+				if (wasForced)
+					chan.sendMessage(MessageCreateData.fromContent("I cannot scan for crashes that does not relate to NTM:CE")).queue();
 			}
 			return true;
 		}
