@@ -51,6 +51,8 @@ public class SillyBot {
 		if (!debug) {
 			if (name.equalsIgnoreCase("warfactory official"))
 				return ServerType.WARFACTORY;
+			if (name.equalsIgnoreCase("ntm cursed"))
+				return ServerType.CURSED;
 		}
 		return ServerType.UNKNOWN;
 	}
@@ -100,8 +102,8 @@ public class SillyBot {
 			Message data = event.getMessage();
 			if (type.equals(ServerType.DEVELOPMENT) || type.equals(ServerType.WARFACTORY)) {
 				tryQNA(event,type,data);
-				tryAnswerGeneral(event,type,data);
 			}
+			tryAnswerGeneral(event,type,data);
 			String message = data.getContentDisplay();
 			if (message.equals("?quickscan")) {
 				Message ref = data.getReferencedMessage();
@@ -253,12 +255,14 @@ public class SillyBot {
 		/// why do people do this?
 		public static void tryAnswerGeneral(MessageReceivedEvent event,ServerType type,Message data) {
 			MessageChannelUnion chan = event.getChannel();
-			if (chan.getName().equalsIgnoreCase("warfactory-general")) {
+			if (chan.getName().equalsIgnoreCase("warfactory-general") && (type == ServerType.DEVELOPMENT || type == ServerType.WARFACTORY)) {
 				String msg = data.getContentDisplay().toLowerCase();
 				if (containsByFuncs(msg,QuestionDetector::howTo,QuestionDetector::anyWayTo)) {
 					if (containsRegexes(msg,"he","convert to") && containsRegexes(msg,"rf","fe"))
 						chan.sendMessage(append(Responses.qnaConverter(),"\n\nAlso please don't ask questions in https://discord.com/channels/1241479482964054057/1273376849283645470.").build()).queue();
 				}
+				tryQuickScan(data,data,chan,false,false);
+			} else if ((chan.getName().equalsIgnoreCase("general") || chan.getName().equalsIgnoreCase("questions")) && (type == ServerType.DEVELOPMENT || type == ServerType.CURSED)) {
 				tryQuickScan(data,data,chan,false,false);
 			}
 		}
