@@ -5,26 +5,36 @@ import net.dv8tion.jda.api.JDABuilder;
 import net.dv8tion.jda.api.OnlineStatus;
 import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.entities.Message;
+import net.dv8tion.jda.api.entities.Message.Attachment;
+import net.dv8tion.jda.api.entities.MessageEmbed;
 import net.dv8tion.jda.api.entities.SelfUser;
+import net.dv8tion.jda.api.entities.channel.Channel;
 import net.dv8tion.jda.api.entities.channel.concrete.ForumChannel;
+import net.dv8tion.jda.api.entities.channel.middleman.MessageChannel;
 import net.dv8tion.jda.api.entities.channel.unions.MessageChannelUnion;
 import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
 import net.dv8tion.jda.api.requests.GatewayIntent;
 import net.dv8tion.jda.api.utils.FileUpload;
 import net.dv8tion.jda.api.utils.messages.MessageCreateBuilder;
+import net.dv8tion.jda.api.utils.messages.MessageCreateData;
 import net.dv8tion.jda.internal.entities.channel.concrete.ThreadChannelImpl;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.*;
+import java.net.URL;
+import java.net.URLConnection;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.*;
 import java.util.function.Function;
 import java.util.function.Supplier;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class SillyBot {
-	private static final boolean debug = false;
+	private static final boolean debug = true;
 	private static final Logger logger = LoggerFactory.getLogger(SillyBot.class);
 	private static JDA jda;
 	private static final File tokenDir = new File("D:\\sillybot_token.txt"); // top secret!!
@@ -82,6 +92,8 @@ public class SillyBot {
 		public void onMessageReceived(MessageReceivedEvent event) {
 			if (event.getAuthor().equals(self)) return;
 			ServerType type = getServerType(event.getGuild());
+			if (!type.equals(ServerType.DEVELOPMENT) && debug) return;
+
 			MessageChannelUnion chan = event.getChannel();
 			if (type.equals(ServerType.DEVELOPMENT) && chan.getName().equalsIgnoreCase("resources"))
 				return;
@@ -91,7 +103,17 @@ public class SillyBot {
 				tryAnswerGeneral(event,type,data);
 			}
 			String message = data.getContentDisplay();
-			if (message.startsWith("?answer ")) {
+			if (message.equals("?quickscan")) {
+				Message ref = data.getReferencedMessage();
+				if (ref == null)
+					chan.sendMessage("you have to reply to a message containing logs").queue();
+				else {
+					if (System.currentTimeMillis() < lastCommandUse+10000)
+						chan.sendMessage("I can't keep up! ("+((lastCommandUse+10000-System.currentTimeMillis())/1000)+"s left)").queue();
+					lastCommandUse = System.currentTimeMillis();
+					tryQuickScan(data,ref,chan,true,true);
+				}
+			} else if (message.startsWith("?answer ")) {
 				if (System.currentTimeMillis() < lastCommandUse+10000)
 					chan.sendMessage("I can't keep up! ("+((lastCommandUse+10000-System.currentTimeMillis())/1000)+"s left)").queue();
 				else {
@@ -105,18 +127,128 @@ public class SillyBot {
 							sb.append(s);
 							first = false;
 						}
-						chan.sendMessage("Tags: "+sb.toString()).queue();
+						chan.sendMessage("tags: "+sb.toString()).queue();
 					} else if (Responses.tags.containsKey(tag)) {
 						lastCommandUse = System.currentTimeMillis();
 						chan.sendMessage(append(Responses.tags.get(tag).get(),"\n\nHope this helps!").build()).queue();
 					} else
-						chan.sendMessage("No tag "+tag+" found").queue();
+						chan.sendMessage("no tag "+tag+" found").queue();
 				}
 			}
 			//if (true) return;
 			//event.getMessage().getChannel().sendMessage("Channel class: "+chan.getClass().getName()).queue();
 			//event.getMessage().getChannel().sendMessage("name: "+impl.getName()+", count: "+impl.getTotalMessageCount()).queue();
 			//event.getMessage().getChannel().sendMessage("forum name: "+forum.getName()).queue();
+		}
+		public static boolean tryQuickScan(Message data,Message target,MessageChannel chan,boolean wasForced,boolean shouldSendSuccessMessage) {
+			String url = null;
+			for (MessageEmbed embed : target.getEmbeds())
+				url = embed.getUrl();
+			for (Attachment attachment : target.getAttachments())
+				url = attachment.getUrl();
+			if (url != null)
+				return diagnoseLog(url,data,chan,wasForced,shouldSendSuccessMessage);
+			else if (wasForced)
+				chan.sendMessage("that message ain't logs!").queue();
+			return false;
+		}
+		public static final Pattern modListPattern = Pattern.compile(".*\\|\\s*LC\\w*\\s*\\|\\s*(\\w+)\\s*\\|\\s*(\\S*)\\s*\\|.*\\|.*\\|.*");
+		public static boolean diagnoseLog(String url,Message data,MessageChannel chan,boolean wasForced,boolean shouldSendSuccessMessage) {
+			System.out.println("Diagnosing link "+url);
+			List<String> lines = readFromURL(url);
+			if (lines == null) {
+				if (wasForced)
+					chan.sendMessage(MessageCreateData.fromContent("are you sure that's a log?")).queue();
+				return false;
+			}
+			boolean good = false;
+			boolean isCrash = false;
+			Map<String,String> modlist = new HashMap<>();
+			for (String line : lines) {
+				System.out.println(line);
+				if (line.contains("main/INFO") || line.contains("main/WARN") || line.contains("main/ERROR"))
+					good = true;
+				if (line.contains("Minecraft Crash Report") || line.contains("System Details"))
+					isCrash = true;
+				Matcher matcher = modListPattern.matcher(line);
+				if (matcher.matches()) {
+					//System.out.println("Analyzing modlist, data: "+matcher.group(1)+": "+matcher.group(2));
+					modlist.put(matcher.group(1),matcher.group(2));
+				}
+			}
+			if (!good && wasForced && !isCrash) {
+				chan.sendMessage(MessageCreateData.fromContent("that doesn't look like a Minecraft log")).queue();
+				return false;
+			}
+			if (!isCrash) {
+				if (wasForced)
+					chan.sendMessage(MessageCreateData.fromContent("I couldn't find any crash information in it")).queue();
+				return false;
+			}
+			String prefix = "";
+			if (modlist.containsKey("hbm")) {
+				{ // missing mods
+					boolean isMissingMixin = false;
+					boolean isMissingCTM = false;
+					if (!modlist.containsKey("mixinbooter"))
+						isMissingMixin = true;
+					if (!modlist.containsKey("ctm"))
+						isMissingCTM = true;
+					if (/*isMissingCTM || */isMissingMixin) {
+						String mods = "";
+						if (isMissingMixin)
+							mods = "MixinBooter";
+						if (isMissingCTM) {
+							if (isMissingMixin)
+								mods = mods + " and ";
+							mods = mods + "ConnectedTexturesMod";
+						}
+						chan.sendMessage(MessageCreateData.fromContent("you need to get "+mods+" to run NTM:CE")).queue();
+						prefix = "also ";
+					}
+				}
+				{ // base conflicts
+					if (modlist.containsKey("essential")) {
+						chan.sendMessage(MessageCreateData.fromContent(prefix+"you need to get rid of Essential, that mod is not compatible with NTM:CE because it shadows mixins")).queue();
+						prefix = "also ";
+					}
+				}
+				if (modlist.containsKey("leafia")) { // LCA conflicts
+					if (modlist.containsKey("tickcentral")) {
+						chan.sendMessage(MessageCreateData.fromContent(prefix+"TickCentral is not compatible with Leafia's Cursed Addon")).queue();
+						prefix = "also ";
+					}
+					if (modlist.containsKey("entityculling")) {
+						chan.sendMessage(MessageCreateData.fromContent(prefix+"EntityCulling conflicts with Leafia's Cursed Addon for some reason")).queue();
+						prefix = "also ";
+					}
+				}
+				if (prefix.isEmpty() && shouldSendSuccessMessage)
+					chan.sendMessage(MessageCreateData.fromContent("I did a quick scan for common causes, couldn't find any issues there")).queue();
+			}
+			return true;
+		}
+		public static List<String> readFromURL(String link) {
+			try {
+				URL url = new URL(link);
+				URLConnection conn = url.openConnection();
+				conn.setConnectTimeout(5000);
+				conn.setReadTimeout(5000);
+				BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream(),StandardCharsets.UTF_8));
+				String line;
+				List<String> lines = new ArrayList<>();
+				while ((line = reader.readLine()) != null) {
+					for (byte b : line.getBytes()) {
+						if (b == 0)
+							return null;
+					}
+					lines.addAll(Arrays.asList(line.split("<a")));
+				}
+				return lines;
+			} catch (Exception e) {
+				e.printStackTrace();
+			}
+			return new ArrayList<>();
 		}
 		/// why do people do this?
 		public static void tryAnswerGeneral(MessageReceivedEvent event,ServerType type,Message data) {
@@ -125,8 +257,9 @@ public class SillyBot {
 				String msg = data.getContentDisplay().toLowerCase();
 				if (containsByFuncs(msg,QuestionDetector::howTo,QuestionDetector::anyWayTo)) {
 					if (containsRegexes(msg,"he","convert to") && containsRegexes(msg,"rf","fe"))
-						chan.sendMessage(append(Responses.qnaConverter(),"\n\nAlso please don't ask questions in general.").build()).queue();
+						chan.sendMessage(append(Responses.qnaConverter(),"\n\nAlso please don't ask questions in https://discord.com/channels/1241479482964054057/1273376849283645470.").build()).queue();
 				}
+				tryQuickScan(data,data,chan,false,false);
 			}
 		}
 		public static void tryQNA(MessageReceivedEvent event,ServerType type,Message data) {
@@ -138,7 +271,8 @@ public class SillyBot {
 					if (thread.getMessageCount() <= 1 || type.equals(ServerType.DEVELOPMENT)) {
 						if (forum.getName().equalsIgnoreCase("issues-and-qna"))
 							answerQNA(data,thread,event);
-					}
+					} else
+						tryQuickScan(data,data,chan,false,false);
 				}
 			}
 		}
@@ -147,6 +281,10 @@ public class SillyBot {
 			String title = thread.getName();
 			if (threadContainsRegexes(title,msg,"he") && threadContainsRegexes(title,msg,"rf","fe"))
 				thread.sendMessage(append(Responses.qnaConverter(),"\n\nHope this helps!").build()).queue();
+			else if (threadContainsRegexes(title,msg,"crash")) {
+				if (!tryQuickScan(data,data,thread,false,true))
+					thread.sendMessage(MessageCreateData.fromContent("please provide logs if you haven't, we cannot do anything without it")).queue();
+			}
 		}
 	}
 	public static MessageCreateBuilder append(MessageCreateBuilder c,String... ss) {
