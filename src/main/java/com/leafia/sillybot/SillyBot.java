@@ -154,7 +154,7 @@ public class SillyBot {
 		}
 		public static final Pattern modListPattern = Pattern.compile(".*\\|\\s*LC\\w*\\s*\\|\\s*(\\w+)\\s*\\|\\s*(\\S*)\\s*\\|.*\\|.*\\|.*");
 		public static boolean diagnoseLog(String url,Message data,MessageChannel chan,boolean wasForced,boolean shouldSendSuccessMessage) {
-			System.out.println("Diagnosing link "+url);
+			//System.out.println("Diagnosing link "+url);
 			List<String> lines = readFromURL(url);
 			if (lines == null) {
 				if (wasForced)
@@ -165,7 +165,7 @@ public class SillyBot {
 			boolean isCrash = false;
 			Map<String,String> modlist = new HashMap<>();
 			for (String line : lines) {
-				System.out.println(line);
+				//System.out.println(line);
 				if (line.contains("main/INFO") || line.contains("main/WARN") || line.contains("main/ERROR"))
 					good = true;
 				if (line.contains("Minecraft Crash Report") || line.contains("System Details"))
