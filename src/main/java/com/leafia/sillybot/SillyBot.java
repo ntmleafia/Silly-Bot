@@ -267,7 +267,7 @@ public class SillyBot {
 						chan.sendMessage(append(Responses.qnaConverter(),"\n\nAlso please don't ask questions in https://discord.com/channels/1241479482964054057/1273376849283645470.").build()).queue();
 				}
 				tryQuickScan(data,data,chan,false,false);
-			} else if ((chan.getName().equalsIgnoreCase("general") || chan.getName().equalsIgnoreCase("questions")) && (type == ServerType.DEVELOPMENT || type == ServerType.CURSED)) {
+			} else if ((chan.getName().equalsIgnoreCase("general") || chan.getName().equalsIgnoreCase("ntm-questions")) && (type == ServerType.DEVELOPMENT || type == ServerType.CURSED)) {
 				tryQuickScan(data,data,chan,false,false);
 			}
 		}
