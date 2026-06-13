@@ -2,15 +2,13 @@ package com.leafia.sillybot;
 
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.JDABuilder;
+import net.dv8tion.jda.api.OnlineStatus;
 import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.entities.SelfUser;
-import net.dv8tion.jda.api.entities.channel.Channel;
 import net.dv8tion.jda.api.entities.channel.concrete.ForumChannel;
-import net.dv8tion.jda.api.events.channel.ChannelCreateEvent;
-import net.dv8tion.jda.api.events.message.GenericMessageEvent;
+import net.dv8tion.jda.api.entities.channel.unions.MessageChannelUnion;
 import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
-import net.dv8tion.jda.api.events.thread.GenericThreadEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
 import net.dv8tion.jda.api.requests.GatewayIntent;
 import net.dv8tion.jda.api.utils.FileUpload;
@@ -19,12 +17,14 @@ import net.dv8tion.jda.internal.entities.channel.concrete.ThreadChannelImpl;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.File;
-import java.io.InputStream;
+import java.io.*;
 import java.nio.file.Files;
 import java.util.*;
+import java.util.function.Function;
+import java.util.function.Supplier;
 
 public class SillyBot {
+	private static final boolean debug = false;
 	private static final Logger logger = LoggerFactory.getLogger(SillyBot.class);
 	private static JDA jda;
 	private static final File tokenDir = new File("D:\\sillybot_token.txt"); // top secret!!
@@ -32,39 +32,112 @@ public class SillyBot {
 	public enum ServerType {
 		CURSED,WARFACTORY,DEVELOPMENT,UNKNOWN
 	}
+	private static long lastCommandUse = 0;
 	// this is so crappy
 	public static ServerType getServerType(Guild server) {
 		String name = server.getName();
 		if (name.equalsIgnoreCase("silly bot development"))
 			return ServerType.DEVELOPMENT;
-		if (name.equalsIgnoreCase("warfactory official"))
-			return ServerType.WARFACTORY;
+		if (!debug) {
+			if (name.equalsIgnoreCase("warfactory official"))
+				return ServerType.WARFACTORY;
+		}
 		return ServerType.UNKNOWN;
+	}
+	public static class Responses {
+		public static Map<String,Supplier<MessageCreateBuilder>> tags = new HashMap<>();
+		static {
+			tags.put("qna_converter",Responses::qnaConverter);
+		}
+		public static MessageCreateBuilder qnaConverter() {
+			return new MessageCreateBuilder()
+					.setContent(
+							"HE/RF converters are purely decorative in NTM:CE. Cables do not connect (see picture 1), " +
+									"nor the block has any functionality at all besides spitting a wall of text on your screen." +
+									"\nInstead, NTM:CE does HE/RF conversion automatically. This can be done in 2 ways:" +
+									"\n\n## Connecting RF cables to HE-based machines directly" +
+									"\nTo get it working, you have to connect cables that use RF directly from your HE-based machines " +
+									"(NTM cables does NOT connect to RF cables, as I repeat, you have to connect the cable to machines directly)." +
+									"\n\nSecondly, you have to make sure the RF-based cable you're using explicitly extracts energy from connected devices." +
+									"\nFor example with Mekanism, by just connecting the cable to the battery, it doesn't work. (see picture 2)" +
+									"\nFor this to work, the cable must be set to Pull connection type. (see picture 3)" +
+									"\n\nI don't know much about other mods, but for example with cables from Thermal series you would need a servo, and so on." +
+									"\nIf the mod has no feature to make the cable explicitly pull energy from connected devices, well, you're doomed." +
+									"\n*Applied Energistics 2 uses it's own power system by the way, so this does not work. you have to store it in RF storage from other mods first*" +
+									"\n**Oh and don't forget to enable output on your battery socket. I'd cry if you forget to do that while reaching this far.**" +
+									"\n\n## Automatic cable conversion" +
+									"\nAlternatively, you can enable autoCableConversion in hbm.cfg to make cables from NTM also transfer RF. (see picture 4)" +
+									"\nYou can find this file under config/hbm folder in your Minecraft installation folder."
+					)
+					.addFiles(
+							getUpload("qna/herf/converter.png"),
+							getUpload("qna/herf/energyinvalid.png"),
+							getUpload("qna/herf/energyworking.png"),
+							getUpload("qna/herf/config.png")
+					);
+		}
 	}
 	public static class SillyListener extends ListenerAdapter {
 		@Override
 		public void onMessageReceived(MessageReceivedEvent event) {
 			if (event.getAuthor().equals(self)) return;
 			ServerType type = getServerType(event.getGuild());
-			Channel chan = event.getChannel();
+			MessageChannelUnion chan = event.getChannel();
 			if (type.equals(ServerType.DEVELOPMENT) && chan.getName().equalsIgnoreCase("resources"))
 				return;
-			if (type.equals(ServerType.DEVELOPMENT) || type.equals(ServerType.WARFACTORY))
-				tryQNA(event,type);
+			Message data = event.getMessage();
+			if (type.equals(ServerType.DEVELOPMENT) || type.equals(ServerType.WARFACTORY)) {
+				tryQNA(event,type,data);
+				tryAnswerGeneral(event,type,data);
+			}
+			String message = data.getContentDisplay();
+			if (message.startsWith("?answer ")) {
+				if (System.currentTimeMillis() < lastCommandUse+10000)
+					chan.sendMessage("I can't keep up! ("+((lastCommandUse+10000-System.currentTimeMillis())/1000)+"s left)").queue();
+				else {
+					String tag = message.substring("?answer ".length());
+					if (tag.equalsIgnoreCase("list")) {
+						StringBuilder sb = new StringBuilder();
+						boolean first = true;
+						for (String s : Responses.tags.keySet()) {
+							if (!first)
+								sb.append(", ");
+							sb.append(s);
+							first = false;
+						}
+						chan.sendMessage("Tags: "+sb.toString()).queue();
+					} else if (Responses.tags.containsKey(tag)) {
+						lastCommandUse = System.currentTimeMillis();
+						chan.sendMessage(append(Responses.tags.get(tag).get(),"\n\nHope this helps!").build()).queue();
+					} else
+						chan.sendMessage("No tag "+tag+" found").queue();
+				}
+			}
 			//if (true) return;
 			//event.getMessage().getChannel().sendMessage("Channel class: "+chan.getClass().getName()).queue();
 			//event.getMessage().getChannel().sendMessage("name: "+impl.getName()+", count: "+impl.getTotalMessageCount()).queue();
 			//event.getMessage().getChannel().sendMessage("forum name: "+forum.getName()).queue();
 		}
-		public static void tryQNA(MessageReceivedEvent event,ServerType type) {
-			Channel chan = event.getChannel();
+		/// why do people do this?
+		public static void tryAnswerGeneral(MessageReceivedEvent event,ServerType type,Message data) {
+			MessageChannelUnion chan = event.getChannel();
+			if (chan.getName().equalsIgnoreCase("warfactory-general")) {
+				String msg = data.getContentDisplay().toLowerCase();
+				if (containsByFuncs(msg,QuestionDetector::howTo,QuestionDetector::anyWayTo)) {
+					if (containsRegex(msg,"he") && containsRegexes(msg,"rf","fe"))
+						chan.sendMessage(append(Responses.qnaConverter(),"\n\nAlso please don't ask questions in general.").build()).queue();
+				}
+			}
+		}
+		public static void tryQNA(MessageReceivedEvent event,ServerType type,Message data) {
+			MessageChannelUnion chan = event.getChannel();
 			if (chan instanceof ThreadChannelImpl thread) {
 				if (thread.getParentChannel() instanceof ForumChannel forum) {
 					// if on development server, reply infinitely
 					// if on actual WF server, only reply on the first message of the thread
 					if (thread.getMessageCount() <= 1 || type.equals(ServerType.DEVELOPMENT)) {
 						if (forum.getName().equalsIgnoreCase("issues-and-qna"))
-							answerQNA(event.getMessage(),thread,event);
+							answerQNA(data,thread,event);
 					}
 				}
 			}
@@ -72,37 +145,16 @@ public class SillyBot {
 		public static void answerQNA(Message data,ThreadChannelImpl thread,MessageReceivedEvent event) {
 			String msg = data.getContentDisplay().toLowerCase();
 			String title = thread.getName();
-			if (threadContainsRegexes(title,msg,"he") && threadContainsRegexes(title,msg,"rf","fe")) {
-				thread.sendMessage(new MessageCreateBuilder()
-								.setContent(
-										"HE/RF converters are purely decorative in NTM:CE. Cables do not connect (see picture 1), " +
-										"nor the block has any functionality at all besides spitting a wall of text on your screen." +
-										"\nInstead, NTM:CE does HE/RF conversion automatically. This can be done in 2 ways:" +
-										"\n\n## Connecting RF cables to HE-based machines directly" +
-										"\nTo get it working, you have to connect cables that use RF directly from your HE-based machines " +
-										"(NTM cables does NOT connect to RF cables, as I repeat, you have to connect the cable to machines directly)." +
-										"\n\nSecondly, you have to make sure the RF-based cable you're using explicitly extracts energy from connected devices." +
-										"\nFor example with Mekanism, by just connecting the cable to the battery, it doesn't work. (see picture 2)" +
-										"\nFor this to work, the cable must be set to Pull connection type. (see picture 3)" +
-										"\n\nI don't know much about other mods, but for example with cables from Thermal series you would need a servo, and so on." +
-										"\nIf the mod has no feature to make the cable explicitly pull energy from connected devices, well, you're doomed." +
-										"\n*Applied Energistics 2 uses it's own power system by the way, so this does not work. you have to store it in RF storage from other mods first*" +
-										"\n**Oh and don't forget to enable output on your battery socket. I'd cry if you forget to do that while reaching this far.**" +
-										"\n\n## Automatic cable conversion" +
-										"\nAlternatively, you can enable autoCableConversion in hbm.cfg to make cables from NTM also transfer RF. (see picture 4)" +
-										"\nYou can find this file under config/hbm folder in your Minecraft installation folder." +
-										"\n\nHope this helps!"
-								)
-								.addFiles(
-										getUpload("qna/herf/converter.png"),
-										getUpload("qna/herf/energyinvalid.png"),
-										getUpload("qna/herf/energyworking.png"),
-										getUpload("qna/herf/config.png")
-								)
-								.build()
-				).queue();
-			}
+			if (threadContainsRegexes(title,msg,"he") && threadContainsRegexes(title,msg,"rf","fe"))
+				thread.sendMessage(append(Responses.qnaConverter(),"\n\nHope this helps!").build()).queue();
 		}
+	}
+	public static MessageCreateBuilder append(MessageCreateBuilder c,String... ss) {
+		StringBuilder s1 = new StringBuilder(c.getContent());
+		for (String s : ss)
+			s1.append(s);
+		c.setContent(s1.toString());
+		return c;
 	}
 	public static FileUpload getUpload(String resource) {
 		String[] a = resource.split("/");
@@ -130,8 +182,29 @@ public class SillyBot {
 	public static boolean containsRegex(String s,String w) {
 		return (" "+s.toLowerCase()+" ").matches(".*\\W"+w+"\\W.*");
 	}
+	@SafeVarargs
+	public static boolean containsByFuncs(String s,Function<String,Boolean>... funcs) {
+		for (Function<String,Boolean> func : funcs) {
+			if (func.apply(s))
+				return true;
+		}
+		return false;
+	}
 	static void main(String[] args) {
 		try {
+			if (!debug) {
+				try {
+					System.out.println("The bot is on release mode. Are you sure want to continue? (Y/N)");
+					BufferedReader r = new BufferedReader(new InputStreamReader(System.in));
+					String s = r.readLine();
+					if (!s.equalsIgnoreCase("y")) {
+						throw new RuntimeException("Execution Cancelled");
+					}
+					r.close();
+				} catch (IOException e) {
+					throw new RuntimeException(e);
+				}
+			}
 			String token = Files.readString(tokenDir.toPath());
 			List<GatewayIntent> intents = new ArrayList<>(EnumSet.allOf(GatewayIntent.class));
 			// remove unnecessary privileged intents
@@ -140,6 +213,7 @@ public class SillyBot {
 			jda = JDABuilder.createDefault(token)
 					.enableIntents(intents)
 					.addEventListeners(new SillyListener())
+					.setStatus(debug ? OnlineStatus.IDLE : OnlineStatus.ONLINE)
 					.build();
 			self = jda.getSelfUser();
 			jda.awaitReady();
