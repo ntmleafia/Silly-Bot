@@ -13,7 +13,7 @@ public class QuestionDetector {
 		return false;
 	}
 	public static boolean anyWayTo(String s) {
-		if (SillyBot.containsAllRegexes(s,"any","way","to"))
+		if (SillyBot.containsAllRegexes(s,"any","way","to") || SillyBot.containsAllRegexes(s,"is","possible","to"))
 			return true;
 		return false;
 	}
