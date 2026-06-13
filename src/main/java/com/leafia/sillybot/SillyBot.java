@@ -34,7 +34,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class SillyBot {
-	private static final boolean debug = true;
+	private static final boolean debug = false;
 	private static final Logger logger = LoggerFactory.getLogger(SillyBot.class);
 	private static JDA jda;
 	private static final File tokenDir = new File("D:\\sillybot_token.txt"); // top secret!!
