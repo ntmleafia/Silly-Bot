@@ -124,7 +124,7 @@ public class SillyBot {
 			if (chan.getName().equalsIgnoreCase("warfactory-general")) {
 				String msg = data.getContentDisplay().toLowerCase();
 				if (containsByFuncs(msg,QuestionDetector::howTo,QuestionDetector::anyWayTo)) {
-					if (containsRegex(msg,"he") && containsRegexes(msg,"rf","fe"))
+					if (containsRegexes(msg,"he","convert to") && containsRegexes(msg,"rf","fe"))
 						chan.sendMessage(append(Responses.qnaConverter(),"\n\nAlso please don't ask questions in general.").build()).queue();
 				}
 			}
@@ -178,6 +178,13 @@ public class SillyBot {
 				return true;
 		}
 		return false;
+	}
+	public static boolean containsAllRegexes(String s,String... w) {
+		for (String ws : w) {
+			if (!containsRegex(s,ws))
+				return false;
+		}
+		return true;
 	}
 	public static boolean containsRegex(String s,String w) {
 		return (" "+s.toLowerCase()+" ").matches(".*\\W"+w+"\\W.*");
