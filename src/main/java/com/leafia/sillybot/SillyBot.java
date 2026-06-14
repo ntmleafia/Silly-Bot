@@ -189,7 +189,11 @@ public class SillyBot {
 				int index = line.indexOf("Minecraft Version: ");
 				if (index != -1) {
 					String minecraftVersion = line.substring("Minecraft Version: ".length()+index);
-					System.out.println("VERSION: "+minecraftVersion);
+					if (!minecraftVersion.trim().equals("1.12.2")) {
+						if (wasForced)
+							chan.sendMessage(MessageCreateData.fromContent("I cannot help for NTM versions besides 1.12.2 (yours is "+minecraftVersion+")")).queue();
+						return true;
+					}
 				}
 				Matcher matcher = modListPattern.matcher(line);
 				if (matcher.matches()) {
