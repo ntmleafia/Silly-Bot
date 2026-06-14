@@ -12,8 +12,11 @@ import net.dv8tion.jda.api.entities.channel.Channel;
 import net.dv8tion.jda.api.entities.channel.concrete.ForumChannel;
 import net.dv8tion.jda.api.entities.channel.middleman.MessageChannel;
 import net.dv8tion.jda.api.entities.channel.unions.MessageChannelUnion;
+import net.dv8tion.jda.api.events.interaction.command.GenericCommandInteractionEvent;
 import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
+import net.dv8tion.jda.api.interactions.commands.Command.Type;
+import net.dv8tion.jda.api.interactions.commands.build.Commands;
 import net.dv8tion.jda.api.requests.GatewayIntent;
 import net.dv8tion.jda.api.utils.FileUpload;
 import net.dv8tion.jda.api.utils.messages.MessageCreateBuilder;
@@ -156,7 +159,15 @@ public class SillyBot {
 				chan.sendMessage("that message ain't logs!").queue();
 			return false;
 		}
-		public static final Pattern modListPattern = Pattern.compile(".*\\|\\s*L\\w*\\s*\\|\\s*(\\w+)\\s*\\|\\s*(\\S*)\\s*\\|.*\\|.*");
+		public static final Pattern modListPattern = Pattern.compile(".*\\|\\s*L\\w*\\s*\\|\\s*(\\w+)\\s*\\|\\s*(\\S*)\\s*\\|\\s*(\\S*)\\s*\\|.*");
+		public static class ModInfo {
+			public final String version;
+			public final String filename;
+			public ModInfo(String version,String filename) {
+				this.filename = filename;
+				this.version = version;
+			}
+		}
 		public static boolean diagnoseLog(String url,Message data,MessageChannel chan,boolean wasForced,boolean shouldSendSuccessMessage) {
 			//System.out.println("Diagnosing link "+url);
 			List<String> lines = readFromURL(url);
@@ -167,17 +178,23 @@ public class SillyBot {
 			}
 			boolean good = false;
 			boolean isCrash = false;
-			Map<String,String> modlist = new HashMap<>();
+			Map<String,ModInfo> modlist = new HashMap<>();
+			boolean otherNTMeditions = false;
 			for (String line : lines) {
 				//System.out.println(line);
 				if (line.contains("main/INFO") || line.contains("main/WARN") || line.contains("main/ERROR"))
 					good = true;
 				if (line.contains("Minecraft Crash Report") || line.contains("System Details"))
 					isCrash = true;
+				int index = line.indexOf("Minecraft Version: ");
+				if (index != -1) {
+					String minecraftVersion = line.substring("Minecraft Version: ".length()+index);
+					System.out.println("VERSION: "+minecraftVersion);
+				}
 				Matcher matcher = modListPattern.matcher(line);
 				if (matcher.matches()) {
 					//System.out.println("Analyzing modlist, data: "+matcher.group(1)+": "+matcher.group(2));
-					modlist.put(matcher.group(1),matcher.group(2));
+					modlist.put(matcher.group(1),new ModInfo(matcher.group(2),matcher.group(3)));
 				}
 			}
 			if (!good && wasForced && !isCrash) {
@@ -190,45 +207,75 @@ public class SillyBot {
 				return false;
 			}
 			String prefix = "";
+			Date date = new Date(System.currentTimeMillis());
 			if (modlist.containsKey("hbm")) {
-				{ // missing mods
-					boolean isMissingMixin = false;
-					boolean isMissingCTM = false;
-					if (!modlist.containsKey("mixinbooter"))
-						isMissingMixin = true;
-					if (!modlist.containsKey("ctm"))
-						isMissingCTM = true;
-					if (/*isMissingCTM || */isMissingMixin) {
-						String mods = "";
-						if (isMissingMixin)
-							mods = "MixinBooter";
-						if (isMissingCTM) {
+				String fn = modlist.get("hbm").filename.toLowerCase();
+				if (fn.matches("hbm\\d+\\.\\d+\\.\\d+a?(-g)?.*") || fn.matches("hbm.+a?g?.*")) {
+					chan.sendMessage(MessageCreateData.fromContent("SOMEONE PLAYS RELOADED IN "+(date.getYear()+1900)+"??")).queue();
+					chan.sendMessage(MessageCreateData.fromContent("PLEASE get [Community Edition](https://www.curseforge.com/minecraft/mc-mods/hbm-nuclear-tech-mod-community-edition)")).queue();
+				} else if (fn.contains("waldemar") || fn.matches(".*well.forged.*")) {
+					chan.sendMessage(MessageCreateData.fromContent("that's waldemar edition..")).queue();
+					chan.sendMessage(MessageCreateData.fromContent("please tell me that's a joke.")).queue();
+				} else if (fn.matches(".*hamster.reloaded.*")) {
+					chan.sendMessage(MessageCreateData.fromContent("that's hamster reloaded")).queue();
+					chan.sendMessage(MessageCreateData.fromContent("are you messing with me?")).queue();
+				} else if (fn.contains("extended"))
+					chan.sendMessage(MessageCreateData.fromContent("that's extended edition, get [Community Edition](https://www.curseforge.com/minecraft/mc-mods/hbm-nuclear-tech-mod-community-edition)")).queue();
+				else if (fn.matches("ntm.cursed.edition.*")) // almost forgot
+					chan.sendMessage(MessageCreateData.fromContent("legacy cursed edition is out of support, get [CE](https://www.curseforge.com/minecraft/mc-mods/hbm-nuclear-tech-mod-community-edition) and [LCA](https://github.com/ntmleafia/NTM-Cursed-Addon/releases) instead (your world will not fully convert though)")).queue();
+				else {
+					{ // missing mods
+						boolean isMissingMixin = false;
+						boolean isMissingCTM = false;
+						if (!modlist.containsKey("mixinbooter"))
+							isMissingMixin = true;
+						if (!modlist.containsKey("ctm"))
+							isMissingCTM = true;
+						if (/*isMissingCTM || */isMissingMixin) {
+							String mods = "";
 							if (isMissingMixin)
-								mods = mods + " and ";
-							mods = mods + "ConnectedTexturesMod";
+								mods = "MixinBooter";
+							if (isMissingCTM) {
+								if (isMissingMixin)
+									mods = mods + " and ";
+								mods = mods + "ConnectedTexturesMod";
+							}
+							chan.sendMessage(MessageCreateData.fromContent("you need to get "+mods+" to run NTM:CE")).queue();
+							prefix = "also ";
 						}
-						chan.sendMessage(MessageCreateData.fromContent("you need to get "+mods+" to run NTM:CE")).queue();
-						prefix = "also ";
 					}
+					{ // base conflicts
+						if (modlist.containsKey("essential")) {
+							chan.sendMessage(MessageCreateData.fromContent(prefix+"you need to get rid of Essential, that mod is not compatible with NTM:CE because it shadows mixins")).queue();
+							prefix = "also ";
+						}
+					}
+					if (modlist.containsKey("leafia")) { // LCA conflicts
+						if (modlist.containsKey("tickcentral")) {
+							chan.sendMessage(MessageCreateData.fromContent(prefix+"TickCentral is not compatible with Leafia's Cursed Addon")).queue();
+							prefix = "also ";
+						}
+						if (modlist.containsKey("entityculling")) {
+							chan.sendMessage(MessageCreateData.fromContent(prefix+"EntityCulling conflicts with Leafia's Cursed Addon for some reason")).queue();
+							prefix = "also ";
+						}
+					}
+					if (!otherNTMeditions) { // version check
+						List<String> linesGH = readFromURL("https://raw.githubusercontent.com/Warfactory-Offical/Hbm-s-Nuclear-Tech-CE/refs/heads/master/gradle.properties");
+						for (String s : linesGH) {
+							if (s.trim().startsWith("modVersion")) {
+								String version = s.split("=")[1].trim();
+								if (!modlist.get("hbm").version.matches(version)) {
+									chan.sendMessage(MessageCreateData.fromContent(prefix+"that doesn't look like the latest version of NTM:CE, please upgrade unless I'm stupid")).queue();
+									prefix = "also ";
+								}
+								break;
+							}
+						}
+					}
+					if (prefix.isEmpty() && shouldSendSuccessMessage)
+						chan.sendMessage(MessageCreateData.fromContent("I did a quick scan for common causes, couldn't find any issues there")).queue();
 				}
-				{ // base conflicts
-					if (modlist.containsKey("essential")) {
-						chan.sendMessage(MessageCreateData.fromContent(prefix+"you need to get rid of Essential, that mod is not compatible with NTM:CE because it shadows mixins")).queue();
-						prefix = "also ";
-					}
-				}
-				if (modlist.containsKey("leafia")) { // LCA conflicts
-					if (modlist.containsKey("tickcentral")) {
-						chan.sendMessage(MessageCreateData.fromContent(prefix+"TickCentral is not compatible with Leafia's Cursed Addon")).queue();
-						prefix = "also ";
-					}
-					if (modlist.containsKey("entityculling")) {
-						chan.sendMessage(MessageCreateData.fromContent(prefix+"EntityCulling conflicts with Leafia's Cursed Addon for some reason")).queue();
-						prefix = "also ";
-					}
-				}
-				if (prefix.isEmpty() && shouldSendSuccessMessage)
-					chan.sendMessage(MessageCreateData.fromContent("I did a quick scan for common causes, couldn't find any issues there")).queue();
 			} else {
 				if (wasForced)
 					chan.sendMessage(MessageCreateData.fromContent("I cannot scan for crashes that does not relate to NTM:CE")).queue();
@@ -367,10 +414,14 @@ public class SillyBot {
 			jda = JDABuilder.createDefault(token)
 					.enableIntents(intents)
 					.addEventListeners(new SillyListener())
-					.setStatus(debug ? OnlineStatus.IDLE : OnlineStatus.ONLINE)
+					.setStatus(debug ? OnlineStatus.INVISIBLE : OnlineStatus.ONLINE)
 					.build();
 			self = jda.getSelfUser();
 			jda.awaitReady();
+			/*
+			jda.updateCommands()
+					.addCommands(Commands.message("Quick Scan"))
+					.queue();*/ // fuck you forget it
 		} catch (Exception e) {
 			throw new RuntimeException(e);
 		}
