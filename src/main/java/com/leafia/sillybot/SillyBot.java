@@ -220,9 +220,11 @@ public class SillyBot {
 				} else if (fn.contains("waldemar") || fn.matches(".*well.forged.*")) {
 					chan.sendMessage(MessageCreateData.fromContent("that's waldemar edition..")).queue();
 					chan.sendMessage(MessageCreateData.fromContent("please tell me that's a joke.")).queue();
+					chan.sendMessage(MessageCreateData.fromContent("https://www.curseforge.com/minecraft/mc-mods/hbm-nuclear-tech-mod-community-edition")).queue();
 				} else if (fn.matches(".*hamster.reloaded.*")) {
 					chan.sendMessage(MessageCreateData.fromContent("that's hamster reloaded")).queue();
 					chan.sendMessage(MessageCreateData.fromContent("are you messing with me?")).queue();
+					chan.sendMessage(MessageCreateData.fromContent("https://www.curseforge.com/minecraft/mc-mods/hbm-nuclear-tech-mod-community-edition")).queue();
 				} else if (fn.contains("extended"))
 					chan.sendMessage(MessageCreateData.fromContent("that's extended edition, get [Community Edition](https://www.curseforge.com/minecraft/mc-mods/hbm-nuclear-tech-mod-community-edition)")).queue();
 				else if (fn.matches("ntm.cursed.edition.*")) // almost forgot
