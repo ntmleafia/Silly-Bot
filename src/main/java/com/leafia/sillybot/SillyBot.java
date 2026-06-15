@@ -3,25 +3,22 @@ package com.leafia.sillybot;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.JDABuilder;
 import net.dv8tion.jda.api.OnlineStatus;
-import net.dv8tion.jda.api.entities.Guild;
-import net.dv8tion.jda.api.entities.Message;
+import net.dv8tion.jda.api.entities.*;
 import net.dv8tion.jda.api.entities.Message.Attachment;
-import net.dv8tion.jda.api.entities.MessageEmbed;
-import net.dv8tion.jda.api.entities.SelfUser;
-import net.dv8tion.jda.api.entities.channel.Channel;
 import net.dv8tion.jda.api.entities.channel.concrete.ForumChannel;
 import net.dv8tion.jda.api.entities.channel.middleman.MessageChannel;
 import net.dv8tion.jda.api.entities.channel.unions.MessageChannelUnion;
-import net.dv8tion.jda.api.events.interaction.command.GenericCommandInteractionEvent;
 import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
-import net.dv8tion.jda.api.interactions.commands.Command.Type;
-import net.dv8tion.jda.api.interactions.commands.build.Commands;
 import net.dv8tion.jda.api.requests.GatewayIntent;
 import net.dv8tion.jda.api.utils.FileUpload;
 import net.dv8tion.jda.api.utils.messages.MessageCreateBuilder;
 import net.dv8tion.jda.api.utils.messages.MessageCreateData;
 import net.dv8tion.jda.internal.entities.channel.concrete.ThreadChannelImpl;
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Attribute;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -31,6 +28,7 @@ import java.net.URLConnection;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.*;
+import java.util.concurrent.ExecutionException;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.regex.Matcher;
@@ -98,21 +96,34 @@ public class SillyBot {
 			if (event.getAuthor().equals(self)) return;
 			ServerType type = getServerType(event.getGuild());
 			if (!type.equals(ServerType.DEVELOPMENT) && debug) return;
-
 			MessageChannelUnion chan = event.getChannel();
 			if (type.equals(ServerType.DEVELOPMENT) && chan.getName().equalsIgnoreCase("resources"))
 				return;
 			Message data = event.getMessage();
+			String message = data.getContentDisplay();
+
+			if (data.getContentRaw().contains("<@1514985371711176906>")) {
+				chan.sendMessage("mrow~").queue();
+				return;
+			}
+
 			if (type.equals(ServerType.DEVELOPMENT) || type.equals(ServerType.WARFACTORY)) {
 				tryQNA(event,type,data);
 			}
 			tryAnswerGeneral(event,type,data);
-			String message = data.getContentDisplay();
 			if (message.equals("?quickscan")) {
 				Message ref = data.getReferencedMessage();
-				if (ref == null)
-					chan.sendMessage("you have to reply to a message containing logs").queue();
-				else {
+				if (ref == null) {
+					if (!data.getAttachments().isEmpty()) {
+						if (System.currentTimeMillis() < lastCommandUse+10000) {
+							chan.sendMessage("I can't keep up! ("+((lastCommandUse+10000-System.currentTimeMillis())/1000)+"s left)").queue();
+							return;
+						}
+						lastCommandUse = System.currentTimeMillis();
+						tryQuickScan(data,data,chan,true,true);
+					} else
+						chan.sendMessage("you have to reply to a message containing logs").queue();
+				} else {
 					if (System.currentTimeMillis() < lastCommandUse+10000) {
 						chan.sendMessage("I can't keep up! ("+((lastCommandUse+10000-System.currentTimeMillis())/1000)+"s left)").queue();
 						return;
@@ -120,6 +131,7 @@ public class SillyBot {
 					lastCommandUse = System.currentTimeMillis();
 					tryQuickScan(data,ref,chan,true,true);
 				}
+				return;
 			} else if (message.startsWith("?answer ")) {
 				if (System.currentTimeMillis() < lastCommandUse+10000)
 					chan.sendMessage("I can't keep up! ("+((lastCommandUse+10000-System.currentTimeMillis())/1000)+"s left)").queue();
@@ -141,12 +153,32 @@ public class SillyBot {
 					} else
 						chan.sendMessage("no tag "+tag+" found").queue();
 				}
+				return;
 			}
+			//tryConversation(event,data);
 			//if (true) return;
 			//event.getMessage().getChannel().sendMessage("Channel class: "+chan.getClass().getName()).queue();
 			//event.getMessage().getChannel().sendMessage("name: "+impl.getName()+", count: "+impl.getTotalMessageCount()).queue();
 			//event.getMessage().getChannel().sendMessage("forum name: "+forum.getName()).queue();
 		}
+		/*
+		public static boolean tryConversation(MessageReceivedEvent event,Message data) {
+			Message ref = data.getReferencedMessage();
+			if (ref == null) {
+				try {
+					User IAsked = null;
+					for (Message r2 : event.getChannel().getHistory().retrievePast(5).submit().get()) {
+						if (r2.getAuthor() == self) {
+							Message r3 = r2.getReferencedMessage();
+							if (r3 != null)
+								IAsked = r3.getAuthor();
+						} else if (IAsked != null) {
+
+						}
+					}
+				} catch (Exception ignored) { }
+			}
+		}*/ // yeah screw it im keeping my bot simple
 		public static boolean tryQuickScan(Message data,Message target,MessageChannel chan,boolean wasForced,boolean shouldSendSuccessMessage) {
 			String url = null;
 			for (MessageEmbed embed : target.getEmbeds())
@@ -155,8 +187,24 @@ public class SillyBot {
 				url = attachment.getUrl();
 			if (url != null)
 				return diagnoseLog(url,data,chan,wasForced,shouldSendSuccessMessage);
-			else if (wasForced)
-				chan.sendMessage("that message ain't logs!").queue();
+			else if (wasForced) {
+				if (target.getAuthor().equals(self))
+					chan.sendMessage("a-are you scanning ME?!").queue();
+				else {
+					if (target.getContentDisplay().equals("?quickscan")) {
+						long id = target.getAuthor().getIdLong();
+						long var = id%10;
+						switch((int)var) {
+							case 0,5 -> chan.sendMessage("probably a human").queue();
+							case 1,6 -> chan.sendMessage("probably not a human").queue();
+							case 2,7 -> chan.sendMessage("definitely a furry :3c").queue();
+							case 3,8 -> chan.sendMessage("their base is probably a lawnbase").queue();
+							case 4,9 -> chan.sendMessage("they probably don't play minecraft").queue();
+						}
+					} else
+						chan.sendMessage("that message ain't logs!").queue();
+				}
+			}
 			return false;
 		}
 		public static final Pattern modListPattern = Pattern.compile(".*\\|\\s*L\\w*\\s*\\|\\s*(\\w+)\\s*\\|\\s*(\\S*)\\s*\\|\\s*(\\S*)\\s*\\|.*");
@@ -168,6 +216,14 @@ public class SillyBot {
 				this.version = version;
 			}
 		}
+		public static final Pattern errorPattern = Pattern.compile("\\[\\d+:\\d+:\\d+\\]\\s*\\[(\\w+)/(\\w+)\\].*");
+		public enum ErrorType { ERROR,FATAL }
+		public static class ErrorData {
+			public ErrorType type;
+			public String title;
+			public String thread = "Unknown";
+			public final List<String> stacktrace = new ArrayList<>();
+		}
 		public static boolean diagnoseLog(String url,Message data,MessageChannel chan,boolean wasForced,boolean shouldSendSuccessMessage) {
 			//System.out.println("Diagnosing link "+url);
 			List<String> lines = readFromURL(url);
@@ -176,16 +232,68 @@ public class SillyBot {
 					chan.sendMessage(MessageCreateData.fromContent("are you sure that's a log?")).queue();
 				return false;
 			}
-			boolean good = false;
+			boolean isFullLog = false;
 			boolean isCrash = false;
 			Map<String,ModInfo> modlist = new HashMap<>();
 			boolean otherNTMeditions = false;
+			List<ErrorData> errorDatas = new ArrayList<>();
+			ErrorData curBuilding = null;
+			int crashMessageDetectionPhase = 0;
 			for (String line : lines) {
-				//System.out.println(line);
-				if (line.contains("main/INFO") || line.contains("main/WARN") || line.contains("main/ERROR"))
-					good = true;
+				if (line.contains("main/INFO") || line.contains("main/WARN") || line.contains("main/ERROR") || line.contains("main/FATAL"))
+					isFullLog = true;
 				if (line.contains("Minecraft Crash Report") || line.contains("System Details"))
 					isCrash = true;
+				if (curBuilding != null) {
+					if (line.startsWith("[") || line.isBlank()) {
+						if (curBuilding.title != null)
+							errorDatas.add(curBuilding);
+						else {
+							/*System.out.println("WARNING: Dismissed broken error data!");
+							for (String s : curBuilding.stacktrace)
+								System.out.println(s);*/
+						}
+						curBuilding = null;
+					} else {
+						if (curBuilding.title == null)
+							curBuilding.title = line;
+						else
+							curBuilding.stacktrace.add(line.trim());
+					}
+				}
+				if (isCrash) {
+					if (crashMessageDetectionPhase == 0) {
+						if (line.startsWith("Time:"))
+							crashMessageDetectionPhase = 1;
+					} else if (crashMessageDetectionPhase == 1) {
+						if (line.startsWith("Description:"))
+							crashMessageDetectionPhase = 2;
+					} else if (crashMessageDetectionPhase == 2) {
+						if (!line.isBlank()) {
+							crashMessageDetectionPhase = 3;
+							curBuilding = new ErrorData();
+							curBuilding.type = ErrorType.FATAL;
+							curBuilding.title = line;
+						}
+					}
+				} else {
+					if (line.contains("/ERROR") || line.contains("/FATAL")) {
+						Matcher matcher = errorPattern.matcher(line);
+						if (matcher.matches()) {
+							String thread = matcher.group(1);
+							String type = matcher.group(2);
+							curBuilding = new ErrorData();
+							curBuilding.thread = thread;
+							if (type.equals("FATAL"))
+								curBuilding.type = ErrorType.FATAL;
+							else if (type.equals("ERROR"))
+								curBuilding.type = ErrorType.ERROR;
+							else
+								throw new RuntimeException("Got unexpected error type "+type);
+						}
+					}
+				}
+
 				int index = line.indexOf("Minecraft Version: ");
 				if (index != -1) {
 					String minecraftVersion = line.substring("Minecraft Version: ".length()+index);
@@ -201,13 +309,14 @@ public class SillyBot {
 					modlist.put(matcher.group(1),new ModInfo(matcher.group(2),matcher.group(3)));
 				}
 			}
-			if (!good && wasForced && !isCrash) {
+			if (!isFullLog && wasForced && !isCrash) {
 				chan.sendMessage(MessageCreateData.fromContent("that doesn't look like a Minecraft log")).queue();
 				return false;
 			}
 			if (!isCrash) {
 				if (wasForced)
 					chan.sendMessage(MessageCreateData.fromContent("I couldn't find any crash information in it")).queue();
+				diagnoseErrors(chan,errorDatas,wasForced);
 				return false;
 			}
 			String prefix = "";
@@ -279,14 +388,59 @@ public class SillyBot {
 							}
 						}
 					}
-					if (prefix.isEmpty() && shouldSendSuccessMessage)
+					if (prefix.isEmpty() && shouldSendSuccessMessage) {
 						chan.sendMessage(MessageCreateData.fromContent("I did a quick scan for common causes, couldn't find any issues there")).queue();
+						diagnoseErrors(chan,errorDatas,wasForced);
+					}
 				}
 			} else {
 				if (wasForced)
 					chan.sendMessage(MessageCreateData.fromContent("I cannot scan for crashes that does not relate to NTM:CE")).queue();
 			}
 			return true;
+		}
+		public static String[] split2(String s,String sep) {
+			String[] out = new String[2];
+			int index = s.indexOf(sep);
+			out[0] = s.substring(0,index);
+			out[1] = s.substring(index+1);
+			return out;
+		}
+		public static void diagnoseErrors(MessageChannel chan,List<ErrorData> errorDatas,boolean wasForced) {
+			boolean first = true;
+			for (ErrorData edat : errorDatas) {
+				String sendMsg = null;
+				if (edat.type == ErrorType.FATAL) {
+					String type = edat.title;
+					String message = "";
+					if (edat.title.contains(":")) {
+						String[] spl = split2(edat.title,":");
+						type = spl[0];
+						message = spl[1];
+					}
+					String[] exceptionClassPath = type.split("\\.");
+					String name = exceptionClassPath[exceptionClassPath.length-1];
+					if (name.equals("ConcurrentModificationException"))
+						sendMsg = "-# "+edat.title+"\nConcurrentModificationException detected, it might be a luck-based crash\ntry joining the world again, it might just go as if nothing happened";
+					else if (name.toLowerCase().contains("mixin")) {
+						if (name.equals("MixinTargetAlreadyLoadedException") && !message.isBlank()) {
+							int indexDot = message.indexOf(".");
+							String mod = message.substring(0,indexDot);
+							int indexSpace = mod.lastIndexOf(" ");
+							mod = mod.substring(indexSpace+1);
+							sendMsg = "-# "+edat.title+"\nMixin related error, possibly mod conflict.\nthe offending mod might be "+mod+", try getting rid of it";
+						} else {
+							sendMsg = "-# "+edat.title+"\nMixin related error, but I couldn't get the specific reason for it\nBut this is most likely a mod conflict";
+						}
+					}
+				}
+				if (sendMsg != null) {
+					if (first)
+						chan.sendMessage(MessageCreateData.fromContent("here are possible solutions:")).queue();
+					first = false;
+					chan.sendMessage(MessageCreateData.fromContent(sendMsg)).queue();
+				}
+			}
 		}
 		public static List<String> readFromURL(String link) {
 			try {
@@ -297,12 +451,37 @@ public class SillyBot {
 				BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream(),StandardCharsets.UTF_8));
 				String line;
 				List<String> lines = new ArrayList<>();
+				StringBuilder concentrate = new StringBuilder();
 				while ((line = reader.readLine()) != null) {
 					for (byte b : line.getBytes()) {
 						if (b == 0)
 							return null;
 					}
-					lines.addAll(Arrays.asList(line.split("<a")));
+					/*
+					if (line.contains("http") && line.contains("href") && line.toLowerCase().contains("raw")) {
+
+					}
+					lines.addAll(Arrays.asList(line.split("<a")));*/
+					// fuck it we do html
+					lines.add(line);
+					if (!concentrate.isEmpty())
+						concentrate.append("\n");
+					concentrate.append(line);
+				}
+				String s = concentrate.toString();
+				// if it's html shit, try to get raw content
+				if (s.contains("html")) {
+					Document doc = Jsoup.parse(s);
+					for (Element element : doc.body()) {
+						if (element.html().toLowerCase().contains("raw")) {
+							Attribute attr = element.attribute("href");
+							if (attr != null) {
+								String lnk = attr.getValue();
+								if (lnk.contains("http"))
+									return readFromURL(lnk);
+							}
+						}
+					}
 				}
 				return lines;
 			} catch (Exception e) {
@@ -417,11 +596,13 @@ public class SillyBot {
 			// remove unnecessary privileged intents
 			intents.remove(GatewayIntent.GUILD_PRESENCES);
 			intents.remove(GatewayIntent.GUILD_MEMBERS);
-			jda = JDABuilder.createDefault(token)
+			JDABuilder builder = JDABuilder.createDefault(token)
 					.enableIntents(intents)
 					.addEventListeners(new SillyListener())
-					.setStatus(debug ? OnlineStatus.INVISIBLE : OnlineStatus.ONLINE)
-					.build();
+					.setStatus(debug ? OnlineStatus.IDLE : OnlineStatus.ONLINE);
+			if (debug)
+				builder.setActivity(Activity.customStatus("Under modification"));
+			jda = builder.build();
 			self = jda.getSelfUser();
 			jda.awaitReady();
 			/*
