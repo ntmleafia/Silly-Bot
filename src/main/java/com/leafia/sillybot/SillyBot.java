@@ -428,7 +428,8 @@ public class SillyBot {
 							String mod = message.substring(0,indexDot);
 							int indexSpace = mod.lastIndexOf(" ");
 							mod = mod.substring(indexSpace+1);
-							sendMsg = "-# "+edat.title+"\nMixin related error, possibly mod conflict.\nthe offending mod might be "+mod+", try getting rid of it";
+							if (!mod.equals("hbm")) // suggesting to remove ntm would be retarded
+								sendMsg = "-# "+edat.title+"\nMixin related error, possibly mod conflict.\nthe offending mod might be "+mod+", try getting rid of it";
 						} else {
 							sendMsg = "-# "+edat.title+"\nMixin related error, but I couldn't get the specific reason for it\nBut this is most likely a mod conflict";
 						}
