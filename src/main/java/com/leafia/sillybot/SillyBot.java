@@ -28,7 +28,6 @@ import java.net.URLConnection;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.*;
-import java.util.concurrent.ExecutionException;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.regex.Matcher;
@@ -196,9 +195,12 @@ public class SillyBot {
 				url = embed.getUrl();
 			for (Attachment attachment : target.getAttachments())
 				url = attachment.getUrl();
-			if (url != null)
-				return diagnoseLog(url,data,chan,wasForced,shouldSendSuccessMessage);
-			else if (wasForced) {
+			if (url != null) {
+				LogDiagnosisReturnCode code = diagnoseLog(url,data,chan,wasForced,shouldSendSuccessMessage);
+				if (code.equals(LogDiagnosisReturnCode.ANSWERED) || code.equals(LogDiagnosisReturnCode.INVALID_ANSWERED))
+					chan.sendMessage("please provide logs again if it continues to crash\nif I don't respond automatically, you can use the ?quickscan command to wake me up").queue();
+				return !code.equals(LogDiagnosisReturnCode.INVALID) && !code.equals(LogDiagnosisReturnCode.INVALID_ANSWERED);
+			} else if (wasForced) {
 				if (target.getAuthor().equals(self))
 					chan.sendMessage("a-are you scanning ME?!").queue();
 				else {
@@ -213,7 +215,7 @@ public class SillyBot {
 							case 4,9 -> chan.sendMessage("they probably don't play minecraft").queue();
 						}
 					} else
-						chan.sendMessage("that message ain't logs!").queue();
+						chan.sendMessage("that message ain't logs!\nmake sure the log is embedded or uploaded as an attachment").queue();
 				}
 			}
 			return false;
@@ -238,13 +240,16 @@ public class SillyBot {
 			public String title;
 			public final List<String> stacktrace = new ArrayList<>();
 		}
-		public static boolean diagnoseLog(String url,Message data,MessageChannel chan,boolean wasForced,boolean shouldSendSuccessMessage) {
+		public enum LogDiagnosisReturnCode {
+			INVALID,INVALID_ANSWERED,OUT_OF_SUPPORT,ANSWERED,SUCCESS
+		}
+		public static LogDiagnosisReturnCode diagnoseLog(String url,Message data,MessageChannel chan,boolean wasForced,boolean shouldSendSuccessMessage) {
 			//System.out.println("Diagnosing link "+url);
 			List<String> lines = readFromURL(url);
 			if (lines == null) {
 				if (wasForced)
 					chan.sendMessage(MessageCreateData.fromContent("are you sure that's a log?")).queue();
-				return false;
+				return LogDiagnosisReturnCode.INVALID;
 			}
 			boolean isFullLog = false;
 			boolean isCrash = false;
@@ -330,7 +335,7 @@ public class SillyBot {
 					if (!minecraftVersion.trim().equals("1.12.2")) {
 						if (wasForced)
 							chan.sendMessage(MessageCreateData.fromContent("I cannot help for NTM versions besides 1.12.2 (yours is "+minecraftVersion+")")).queue();
-						return true;
+						return LogDiagnosisReturnCode.OUT_OF_SUPPORT;
 					}
 				}
 				Matcher matcher = modListPattern.matcher(line);
@@ -341,19 +346,20 @@ public class SillyBot {
 			}
 			if (!isFullLog && wasForced && !isCrash) {
 				chan.sendMessage(MessageCreateData.fromContent("that doesn't look like a Minecraft log")).queue();
-				return false;
+				return LogDiagnosisReturnCode.INVALID;
 			}
 			if (!isCrash) {
 				if (wasForced)
 					chan.sendMessage(MessageCreateData.fromContent("I couldn't find any crash information in it")).queue();
-				diagnoseErrors(chan,errorDatas,wasForced);
-				return false;
+				if (diagnoseErrors(chan,errorDatas,wasForced))
+					return LogDiagnosisReturnCode.INVALID_ANSWERED;
+				return LogDiagnosisReturnCode.INVALID;
 			}
 			String prefix = "";
 			Date date = new Date(System.currentTimeMillis());
 			if (modlist.containsKey("hbm")) {
 				String fn = modlist.get("hbm").filename.toLowerCase();
-				if (fn.matches("hbm\\d+\\.\\d+\\.\\d+a?(-g)?.*") || fn.matches("hbm.+a?g?.*")) {
+				if (fn.matches("hbm\\d+\\.\\d+\\.\\d+a?(-g)?.*") || fn.matches("hbm.a.*") || fn.matches("hbm.g.*")) {
 					chan.sendMessage(MessageCreateData.fromContent("SOMEONE PLAYS RELOADED IN "+(date.getYear()+1900)+"??")).queue();
 					chan.sendMessage(MessageCreateData.fromContent("PLEASE get [Community Edition](https://www.curseforge.com/minecraft/mc-mods/hbm-nuclear-tech-mod-community-edition)")).queue();
 				} else if (fn.contains("waldemar") || fn.matches(".*well.forged.*")) {
@@ -418,16 +424,20 @@ public class SillyBot {
 							}
 						}
 					}
-					if (prefix.isEmpty() && shouldSendSuccessMessage) {
-						chan.sendMessage(MessageCreateData.fromContent("I did a quick scan for common causes, couldn't find any issues there")).queue();
-						diagnoseErrors(chan,errorDatas,wasForced);
+					if (prefix.isEmpty()) {
+						if (shouldSendSuccessMessage)
+							chan.sendMessage(MessageCreateData.fromContent("I did a quick scan for common causes, couldn't find any issues there")).queue();
+						if (diagnoseErrors(chan,errorDatas,wasForced))
+							return LogDiagnosisReturnCode.ANSWERED;
+						return LogDiagnosisReturnCode.SUCCESS;
 					}
+					return LogDiagnosisReturnCode.ANSWERED;
 				}
 			} else {
 				if (wasForced)
 					chan.sendMessage(MessageCreateData.fromContent("I cannot scan for crashes that does not relate to NTM:CE")).queue();
 			}
-			return true;
+			return LogDiagnosisReturnCode.OUT_OF_SUPPORT;
 		}
 		public static String[] split2(String s,String sep) {
 			String[] out = new String[2];
@@ -436,8 +446,9 @@ public class SillyBot {
 			out[1] = s.substring(index+1);
 			return out;
 		}
-		public static void diagnoseErrors(MessageChannel chan,List<ErrorData> errorDatas,boolean wasForced) {
+		public static boolean diagnoseErrors(MessageChannel chan,List<ErrorData> errorDatas,boolean wasForced) {
 			boolean first = true;
+			boolean responded = false;
 			for (ErrorData edat : errorDatas) {
 				String sendMsg = null;
 				if (edat.type == ErrorType.FATAL) {
@@ -484,8 +495,10 @@ public class SillyBot {
 						chan.sendMessage(MessageCreateData.fromContent("here are possible solutions:")).queue();
 					first = false;
 					chan.sendMessage(MessageCreateData.fromContent(sendMsg)).queue();
+					responded = true;
 				}
 			}
+			return responded;
 		}
 		public static List<String> readFromURL(String link) {
 			try {
