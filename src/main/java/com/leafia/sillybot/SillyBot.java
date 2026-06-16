@@ -28,6 +28,7 @@ import java.net.URLConnection;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.*;
+import java.util.Map.Entry;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.regex.Matcher;
@@ -262,6 +263,12 @@ public class SillyBot {
 		public enum LogDiagnosisReturnCode {
 			INVALID,INVALID_ANSWERED,OUT_OF_SUPPORT,ANSWERED,SUCCESS
 		}
+		public static final Map<String,String> antiBallFondling = new HashMap<>();
+		static {
+			antiBallFondling.put("hbm","NTM:CE");
+			antiBallFondling.put("hbmspace","NTM:CE Space");
+			antiBallFondling.put("leafia","Leafia's Cursed Addon");
+		}
 		public static LogDiagnosisReturnCode diagnoseLog(String url,Message data,MessageChannel chan,boolean wasForced,boolean shouldSendSuccessMessage) {
 			//System.out.println("Diagnosing link "+url);
 			List<String> lines = readFromURL(url);
@@ -375,6 +382,20 @@ public class SillyBot {
 				return LogDiagnosisReturnCode.INVALID;
 			}
 			String prefix = "";
+			for (Entry<String,ModInfo> entry : modlist.entrySet()) {
+				if (entry.getValue().filename.contains("-java25")) {
+					if (!modlist.containsKey("cleanroom")) {
+						chan.sendMessage(MessageCreateData.fromContent("you're running java25 build of "+antiBallFondling.getOrDefault(entry.getKey(),entry.getKey())+", that only works with java25 environment like Cleanroom modloader\nif you're using normal Forge, please use one with -java25 prefix")).queue();
+						return LogDiagnosisReturnCode.ANSWERED;
+					}
+				} else if (entry.getValue().filename.contains("-downgraded")) {
+					chan.sendMessage(MessageCreateData.fromContent(prefix+"you're using java 8 build of "+antiBallFondling.getOrDefault(entry.getKey(),entry.getKey())+" that does not shadow JVMDG, normally I'd not recommend that\njust use one without any suffix unless you know what you're doing")).queue();
+					prefix = "also ";
+				} else if (entry.getValue().filename.contains("-dev")) {
+					chan.sendMessage(MessageCreateData.fromContent("you're running dev build of "+antiBallFondling.getOrDefault(entry.getKey(),entry.getKey())+", that only provides the API and no actual mod, of course it won't work\nplease use one without -dev suffix")).queue();
+					return LogDiagnosisReturnCode.ANSWERED;
+				}
+			}
 			Date date = new Date(System.currentTimeMillis());
 			if (modlist.containsKey("hbm")) {
 				String fn = modlist.get("hbm").filename.toLowerCase();
