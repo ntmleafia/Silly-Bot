@@ -106,13 +106,24 @@ public class SillyBot {
 				chan.sendMessage("mrow~").queue();
 				return;
 			}
+			Message ref = data.getReferencedMessage();
+			if (ref != null) {
+				if (ref.getAuthor().equals(self)) {
+					if (message.toLowerCase().equals("thx") || message.toLowerCase().equals("ty") || message.toLowerCase().contains("thank")) {
+						chan.sendMessage("you're welcome :3c").queue();
+						return;
+					} else if (message.toLowerCase().contains("stupid clanker")) {
+						chan.sendMessage("sorry ;(").queue();
+						return;
+					}
+				}
+			}
 
 			if (type.equals(ServerType.DEVELOPMENT) || type.equals(ServerType.WARFACTORY)) {
 				tryQNA(event,type,data);
 			}
 			tryAnswerGeneral(event,type,data);
 			if (message.equals("?quickscan")) {
-				Message ref = data.getReferencedMessage();
 				if (ref == null) {
 					if (!data.getAttachments().isEmpty()) {
 						if (System.currentTimeMillis() < lastCommandUse+10000) {
@@ -191,7 +202,7 @@ public class SillyBot {
 				if (target.getAuthor().equals(self))
 					chan.sendMessage("a-are you scanning ME?!").queue();
 				else {
-					if (target.getContentDisplay().equals("?quickscan")) {
+					if (target.getContentDisplay().contains("scan")) {
 						long id = target.getAuthor().getIdLong();
 						long var = id%10;
 						switch((int)var) {
@@ -220,8 +231,11 @@ public class SillyBot {
 		public enum ErrorType { ERROR,FATAL }
 		public static class ErrorData {
 			public ErrorType type;
-			public String title;
 			public String thread = "Unknown";
+			public final List<ErrorStack> stack = new ArrayList<>();
+		}
+		public static class ErrorStack {
+			public String title;
 			public final List<String> stacktrace = new ArrayList<>();
 		}
 		public static boolean diagnoseLog(String url,Message data,MessageChannel chan,boolean wasForced,boolean shouldSendSuccessMessage) {
@@ -238,15 +252,27 @@ public class SillyBot {
 			boolean otherNTMeditions = false;
 			List<ErrorData> errorDatas = new ArrayList<>();
 			ErrorData curBuilding = null;
+			ErrorStack buildingStack = null;
 			int crashMessageDetectionPhase = 0;
+			boolean readCrashMode = false;
 			for (String line : lines) {
 				if (line.contains("main/INFO") || line.contains("main/WARN") || line.contains("main/ERROR") || line.contains("main/FATAL"))
 					isFullLog = true;
-				if (line.contains("Minecraft Crash Report") || line.contains("System Details"))
+				if (line.startsWith("["))
+					readCrashMode = false;
+				if (line.contains("Minecraft Crash Report")) {
 					isCrash = true;
+					readCrashMode = true;
+				}
 				if (curBuilding != null) {
+					if (line.trim().startsWith("Caused by: ")) {
+						String cause = line.substring(line.indexOf("Caused by: ")+"Caused by: ".length());
+						buildingStack = new ErrorStack();
+						curBuilding.stack.add(buildingStack);
+						buildingStack.title = cause;
+					}
 					if (line.startsWith("[") || line.isBlank()) {
-						if (curBuilding.title != null)
+						if (curBuilding.stack.getFirst().title != null)
 							errorDatas.add(curBuilding);
 						else {
 							/*System.out.println("WARNING: Dismissed broken error data!");
@@ -255,13 +281,13 @@ public class SillyBot {
 						}
 						curBuilding = null;
 					} else {
-						if (curBuilding.title == null)
-							curBuilding.title = line;
+						if (buildingStack.title == null)
+							buildingStack.title = line;
 						else
-							curBuilding.stacktrace.add(line.trim());
+							buildingStack.stacktrace.add(line.trim());
 					}
 				}
-				if (isCrash) {
+				if (readCrashMode) {
 					if (crashMessageDetectionPhase == 0) {
 						if (line.startsWith("Time:"))
 							crashMessageDetectionPhase = 1;
@@ -273,7 +299,9 @@ public class SillyBot {
 							crashMessageDetectionPhase = 3;
 							curBuilding = new ErrorData();
 							curBuilding.type = ErrorType.FATAL;
-							curBuilding.title = line;
+							buildingStack = new ErrorStack();
+							curBuilding.stack.add(buildingStack);
+							buildingStack.title = line;
 						}
 					}
 				} else {
@@ -284,6 +312,8 @@ public class SillyBot {
 							String type = matcher.group(2);
 							curBuilding = new ErrorData();
 							curBuilding.thread = thread;
+							buildingStack = new ErrorStack();
+							curBuilding.stack.add(buildingStack);
 							if (type.equals("FATAL"))
 								curBuilding.type = ErrorType.FATAL;
 							else if (type.equals("ERROR"))
@@ -411,27 +441,41 @@ public class SillyBot {
 			for (ErrorData edat : errorDatas) {
 				String sendMsg = null;
 				if (edat.type == ErrorType.FATAL) {
-					String type = edat.title;
-					String message = "";
-					if (edat.title.contains(":")) {
-						String[] spl = split2(edat.title,":");
-						type = spl[0];
-						message = spl[1];
-					}
-					String[] exceptionClassPath = type.split("\\.");
-					String name = exceptionClassPath[exceptionClassPath.length-1];
-					if (name.equals("ConcurrentModificationException"))
-						sendMsg = "-# "+edat.title+"\nConcurrentModificationException detected, it might be a luck-based crash\ntry joining the world again, it might just go as if nothing happened";
-					else if (name.toLowerCase().contains("mixin")) {
-						if (name.equals("MixinTargetAlreadyLoadedException") && !message.isBlank()) {
-							int indexDot = message.indexOf(".");
-							String mod = message.substring(0,indexDot);
-							int indexSpace = mod.lastIndexOf(" ");
-							mod = mod.substring(indexSpace+1);
-							if (!mod.equals("hbm")) // suggesting to remove ntm would be retarded
-								sendMsg = "-# "+edat.title+"\nMixin related error, possibly mod conflict.\nthe offending mod might be "+mod+", try getting rid of it";
-						} else {
-							sendMsg = "-# "+edat.title+"\nMixin related error, but I couldn't get the specific reason for it\nBut this is most likely a mod conflict";
+					int stackCounter = -1;
+					for (ErrorStack stack : edat.stack) {
+						if (sendMsg != null) break;
+						stackCounter++;
+						String type = stack.title;
+						String message = "";
+						if (stack.title.contains(":")) {
+							String[] spl = split2(stack.title,":");
+							type = spl[0];
+							message = spl[1];
+						}
+						String[] exceptionClassPath = type.split("\\.");
+						String name = exceptionClassPath[exceptionClassPath.length-1];
+						if (name.equals("ConcurrentModificationException"))
+							sendMsg = "-# "+stack.title+"\nConcurrentModificationException detected, it might be a luck-based crash\ntry joining the world again, it might just go as if nothing happened";
+						else if (name.toLowerCase().contains("mixin")) {
+							if (name.equals("MixinTargetAlreadyLoadedException") && !message.isBlank()) {
+								int indexDot = message.indexOf(".");
+								String mod = message.substring(0,indexDot);
+								int indexSpace = mod.lastIndexOf(" ");
+								mod = mod.substring(indexSpace+1);
+								if (!mod.equals("hbm")) // suggesting to remove ntm would be retarded
+									sendMsg = "-# "+stack.title+"\nMixin related error, possibly mod conflict\nthe offending mod might be "+mod+", try getting rid of it";
+							} else {
+								sendMsg = "-# "+stack.title+"\nMixin related error, but I couldn't get the specific reason for it\nBut this is most likely a mod conflict";
+							}
+						} else if (name.equals("NoSuchMethodError") || name.equals("NoSuchFieldError")) {
+							if (!message.contains("hbm")) {
+								String possibleModName = "?";
+								System.out.println(message);
+								try {
+									possibleModName = message.split("\\.")[1]+"(?)";
+								} catch (ArrayIndexOutOfBoundsException ignored) {} // i'm lazy
+								sendMsg = "-# "+stack.title+"\nthe mod is trying to access something from aforementioned mod ("+possibleModName+"), but no such thing exists\nthis could mean you're using a version of "+possibleModName+" that NTM does not intend to work with\nconsider upgrading their mod if there are any updates";
+							}
 						}
 					}
 				}
