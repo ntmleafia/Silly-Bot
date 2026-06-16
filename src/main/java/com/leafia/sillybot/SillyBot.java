@@ -191,10 +191,29 @@ public class SillyBot {
 		}*/ // yeah screw it im keeping my bot simple
 		public static boolean tryQuickScan(Message data,Message target,MessageChannel chan,boolean wasForced,boolean shouldSendSuccessMessage) {
 			String url = null;
-			for (MessageEmbed embed : target.getEmbeds())
-				url = embed.getUrl();
-			for (Attachment attachment : target.getAttachments())
-				url = attachment.getUrl();
+			int priority = 0;
+			for (MessageEmbed embed : target.getEmbeds()) {
+				int curPriority = 0;
+				String curUrl = embed.getUrl();
+				if (curUrl != null) {
+					if (curUrl.contains("mclo.gs") || curUrl.contains("gnomebot.dev"))
+						curPriority = 2;
+					if (curPriority >= priority) {
+						url = curUrl;
+						priority = curPriority;
+					}
+				}
+			}
+			for (Attachment attachment : target.getAttachments()) {
+				int curPriority = 0;
+				String curUrl = attachment.getUrl();
+				if (curUrl.endsWith(".txt"))
+					curPriority = 1;
+				if (curPriority >= priority) {
+					url = curUrl;
+					priority = curPriority;
+				}
+			}
 			if (url != null) {
 				LogDiagnosisReturnCode code = diagnoseLog(url,data,chan,wasForced,shouldSendSuccessMessage);
 				if (code.equals(LogDiagnosisReturnCode.ANSWERED) || code.equals(LogDiagnosisReturnCode.INVALID_ANSWERED))
@@ -659,7 +678,7 @@ public class SillyBot {
 					.addEventListeners(new SillyListener())
 					.setStatus(debug ? OnlineStatus.IDLE : OnlineStatus.ONLINE);
 			if (debug)
-				builder.setActivity(Activity.customStatus("Under modification"));
+				builder.setActivity(Activity.customStatus("Under enhancement"));
 			jda = builder.build();
 			self = jda.getSelfUser();
 			jda.awaitReady();
