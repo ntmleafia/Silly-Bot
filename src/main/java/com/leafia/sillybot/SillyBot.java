@@ -8,6 +8,7 @@ import net.dv8tion.jda.api.entities.Message.Attachment;
 import net.dv8tion.jda.api.entities.channel.concrete.ForumChannel;
 import net.dv8tion.jda.api.entities.channel.middleman.MessageChannel;
 import net.dv8tion.jda.api.entities.channel.unions.MessageChannelUnion;
+import net.dv8tion.jda.api.entities.emoji.Emoji;
 import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
 import net.dv8tion.jda.api.requests.GatewayIntent;
@@ -101,6 +102,8 @@ public class SillyBot {
 				return;
 			Message data = event.getMessage();
 			String message = data.getContentDisplay();
+			if (message.toLowerCase().contains("llce") || message.toLowerCase().contains("legacy lce"))
+				data.addReaction(Emoji.fromUnicode("\uD83D\uDE4F")).queue();
 
 			if (data.getContentRaw().contains("<@1514985371711176906>")) {
 				chan.sendMessage("mrow~").queue();
