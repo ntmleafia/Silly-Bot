@@ -623,7 +623,7 @@ public class SillyBot {
 			String title = thread.getName();
 			if (threadContainsRegexes(title,msg,"he") && threadContainsRegexes(title,msg,"rf","fe"))
 				thread.sendMessage(append(Responses.qnaConverter(),"\n\nHope this helps!").build()).queue();
-			else if (threadContainsRegexes(title,msg,"crash")) {
+			else if (threadContainsRegexes(title,msg,"!crash")) {
 				if (!tryQuickScan(data,data,thread,false,true))
 					thread.sendMessage(MessageCreateData.fromContent("please provide logs if you haven't, we cannot do anything without it")).queue();
 			}
@@ -667,6 +667,8 @@ public class SillyBot {
 		return true;
 	}
 	public static boolean containsRegex(String s,String w) {
+		if (w.startsWith("!"))
+			return (" "+s.toLowerCase()+" ").matches(".*"+w.substring(1)+".*");
 		return (" "+s.toLowerCase()+" ").matches(".*\\W"+w+"\\W.*");
 	}
 	@SafeVarargs
