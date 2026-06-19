@@ -354,6 +354,8 @@ public class SillyBot {
 								curBuilding.type = ErrorType.ERROR;
 							else
 								throw new RuntimeException("Got unexpected error type "+type);
+							if (line.endsWith("Unable to launch"))
+								curBuilding.type = ErrorType.FATAL;
 						}
 					}
 				}
@@ -530,6 +532,9 @@ public class SillyBot {
 								} catch (ArrayIndexOutOfBoundsException ignored) {} // i'm lazy
 								sendMsg = "-# "+stack.title+"\nthe mod is trying to access something from aforementioned mod ("+possibleModName+"), but no such thing exists\nthis could mean you're using a version of "+possibleModName+" that NTM does not intend to work with\nconsider upgrading their mod if there are any updates";
 							}
+						} else if (name.equals("NoClassDefFoundError")) {
+							if (message.contains("zone/rong/mixinbooter"))
+								sendMsg = "it seems like you're missing [MixinBooter](https://www.curseforge.com/minecraft/mc-mods/mixin-booter)";
 						}
 					}
 				}
