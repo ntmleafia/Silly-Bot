@@ -243,7 +243,7 @@ public class SillyBot {
 			}
 			return false;
 		}
-		public static final Pattern modListPattern = Pattern.compile(".*\\|\\s*L\\w*\\s*\\|\\s*(\\w+)\\s*\\|\\s*(\\S*)\\s*\\|\\s*(\\S*)\\s*\\|.*");
+		public static final Pattern modListPattern = Pattern.compile(".*\\|\\s+L\\w*\\s+\\|\\s+(\\w+)\\s+\\|\\s+(\\S*)\\s+\\|\\s+(.*)\\s+\\|.*");
 		public static class ModInfo {
 			public final String version;
 			public final String filename;
