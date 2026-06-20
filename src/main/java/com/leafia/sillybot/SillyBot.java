@@ -123,32 +123,34 @@ public class SillyBot {
 				}
 			}
 			if (message.toLowerCase().contains("ignore") && message.toLowerCase().contains("ver")) {
-				if (ref == null || ref.getAuthor() == self) {
-					boolean checkNeeded = ref == null;
-					Message target = null;
-					Message pivot = ref == null ? data : ref;
-					if (!pivot.getAttachments().isEmpty() || !pivot.getEmbeds().isEmpty())
-						target = pivot;
-					else {
-						try {
-							for (Message src : chan.getHistoryBefore(pivot,10).submit().get().getRetrievedHistory()) {
-								if (checkNeeded) {
-									if (src.getAuthor() == self)
-										checkNeeded = false;
-									else
-										continue;
-								}
-								if (src.getContentDisplay().equals("?quickscan"))
-									src = src.getReferencedMessage();
-								if (src != null && (!src.getAttachments().isEmpty() || !src.getEmbeds().isEmpty())) {
-									target = src;
-									break;
-								}
+				boolean scanAnyway = false;
+				boolean checkNeeded = ref == null;
+				Message target = null;
+				Message pivot = ref == null ? data : ref;
+				if (!pivot.getAttachments().isEmpty() || !pivot.getEmbeds().isEmpty()) {
+					target = pivot;
+					scanAnyway = true;
+				} else if (ref == null || ref.getAuthor() == self) {
+					try {
+						for (Message src : chan.getHistoryBefore(pivot,10).submit().get().getRetrievedHistory()) {
+							if (checkNeeded) {
+								if (src.getAuthor() == self)
+									checkNeeded = false;
+								else
+									continue;
 							}
-						} catch (Exception ignored) { }
-					}
+							if (src.getContentDisplay().equals("?quickscan"))
+								src = src.getReferencedMessage();
+							if (src != null && (!src.getAttachments().isEmpty() || !src.getEmbeds().isEmpty())) {
+								target = src;
+								break;
+							}
+						}
+					} catch (Exception ignored) { }
+				}
+				if (ref == null || ref.getAuthor() == self || scanAnyway) {
 					if (target != null) {
-						tryQuickScan(data,target,chan,true,true,true);
+						tryQuickScan(data,target,chan,!scanAnyway,true,true);
 						return;
 					}
 				}
