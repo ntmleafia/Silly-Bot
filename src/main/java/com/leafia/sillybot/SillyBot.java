@@ -30,6 +30,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.*;
 import java.util.Map.Entry;
+import java.util.concurrent.ExecutionException;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.regex.Matcher;
@@ -115,13 +116,39 @@ public class SillyBot {
 					if (message.toLowerCase().equals("thx") || message.toLowerCase().equals("ty") || message.toLowerCase().contains("thank")) {
 						chan.sendMessage("you're welcome :3c").queue();
 						return;
-					} else if (message.toLowerCase().contains("stupid clanker")) {
+					} else if (message.toLowerCase().contains("clanker")) {
 						chan.sendMessage("sorry ;(").queue();
 						return;
 					}
 				}
 			}
-
+			if (message.toLowerCase().contains("ignore") && message.toLowerCase().contains("ver")) {
+				if (ref == null || ref.getAuthor() == self) {
+					boolean checkNeeded = ref == null;
+					Message target = null;
+					try {
+						for (Message src : chan.getHistory().retrievePast(10).submit().get()) {
+							if (checkNeeded) {
+								if (src.getAuthor() == self)
+									checkNeeded = false;
+								else
+									continue;
+							}
+							if (src.getContentDisplay().equals("?quickscan"))
+								src = src.getReferencedMessage();
+							if (src != null && (!src.getAttachments().isEmpty() || !src.getEmbeds().isEmpty())) {
+								target = src;
+								break;
+							}
+						}
+					} catch (Exception ignored) {
+					}
+					if (target != null) {
+						tryQuickScan(data,target,chan,true,true,true);
+						return;
+					}
+				}
+			}
 			if (type.equals(ServerType.DEVELOPMENT) || type.equals(ServerType.WARFACTORY)) {
 				tryQNA(event,type,data);
 			}
@@ -134,7 +161,7 @@ public class SillyBot {
 							return;
 						}
 						lastCommandUse = System.currentTimeMillis();
-						tryQuickScan(data,data,chan,true,true);
+						tryQuickScan(data,data,chan,true,true,false);
 					} else
 						chan.sendMessage("you have to reply to a message containing logs").queue();
 				} else {
@@ -143,7 +170,7 @@ public class SillyBot {
 						return;
 					}
 					lastCommandUse = System.currentTimeMillis();
-					tryQuickScan(data,ref,chan,true,true);
+					tryQuickScan(data,ref,chan,true,true,false);
 				}
 				return;
 			} else if (message.startsWith("?answer ")) {
@@ -193,7 +220,7 @@ public class SillyBot {
 				} catch (Exception ignored) { }
 			}
 		}*/ // yeah screw it im keeping my bot simple
-		public static boolean tryQuickScan(Message data,Message target,MessageChannel chan,boolean wasForced,boolean shouldSendSuccessMessage) {
+		public static boolean tryQuickScan(Message data,Message target,MessageChannel chan,boolean wasForced,boolean shouldSendSuccessMessage,boolean ignoreVersion) {
 			String url = null;
 			int priority = 0;
 			for (MessageEmbed embed : target.getEmbeds()) {
@@ -219,7 +246,7 @@ public class SillyBot {
 				}
 			}
 			if (url != null) {
-				LogDiagnosisReturnCode code = diagnoseLog(url,data,chan,wasForced,shouldSendSuccessMessage);
+				LogDiagnosisReturnCode code = diagnoseLog(url,data,chan,wasForced,shouldSendSuccessMessage,ignoreVersion);
 				if (code.equals(LogDiagnosisReturnCode.ANSWERED) || code.equals(LogDiagnosisReturnCode.INVALID_ANSWERED))
 					chan.sendMessage("please provide logs again if it continues to crash\nif I don't respond automatically, you can use the ?quickscan command to wake me up").queue();
 				return !code.equals(LogDiagnosisReturnCode.INVALID) && !code.equals(LogDiagnosisReturnCode.INVALID_ANSWERED);
@@ -272,7 +299,7 @@ public class SillyBot {
 			antiBallFondling.put("hbmspace","NTM:CE Space");
 			antiBallFondling.put("leafia","Leafia's Cursed Addon");
 		}
-		public static LogDiagnosisReturnCode diagnoseLog(String url,Message data,MessageChannel chan,boolean wasForced,boolean shouldSendSuccessMessage) {
+		public static LogDiagnosisReturnCode diagnoseLog(String url,Message data,MessageChannel chan,boolean wasForced,boolean shouldSendSuccessMessage,boolean ignoreVersion) {
 			//System.out.println("Diagnosing link "+url);
 			List<String> lines = readFromURL(url);
 			if (lines == null) {
@@ -283,7 +310,6 @@ public class SillyBot {
 			boolean isFullLog = false;
 			boolean isCrash = false;
 			Map<String,ModInfo> modlist = new HashMap<>();
-			boolean otherNTMeditions = false;
 			List<ErrorData> errorDatas = new ArrayList<>();
 			ErrorData curBuilding = null;
 			ErrorStack buildingStack = null;
@@ -396,7 +422,7 @@ public class SillyBot {
 				} else if (entry.getValue().filename.contains("-downgraded")) {
 					chan.sendMessage(MessageCreateData.fromContent(prefix+"you're using java 8 build of "+antiBallFondling.getOrDefault(entry.getKey(),entry.getKey())+" that does not shadow JVMDG, normally I'd not recommend that\njust use one without any suffix unless you know what you're doing")).queue();
 					prefix = "also ";
-				} else if (entry.getValue().filename.contains("-dev")) {
+				} else if (entry.getValue().filename.contains("-dev") && entry.getKey().contains("hbm")) {
 					chan.sendMessage(MessageCreateData.fromContent("you're running dev build of "+antiBallFondling.getOrDefault(entry.getKey(),entry.getKey())+", that only provides the API and no actual mod, of course it won't work\nplease use one without -dev suffix")).queue();
 					return LogDiagnosisReturnCode.ANSWERED;
 				}
@@ -456,13 +482,14 @@ public class SillyBot {
 							prefix = "also ";
 						}
 					}
-					if (!otherNTMeditions) { // version check
+					if (!ignoreVersion) { // version check
 						List<String> linesGH = readFromURL("https://raw.githubusercontent.com/Warfactory-Offical/Hbm-s-Nuclear-Tech-CE/refs/heads/master/gradle.properties");
 						for (String s : linesGH) {
 							if (s.trim().startsWith("modVersion")) {
 								String version = s.split("=")[1].trim();
 								if (!modlist.get("hbm").version.matches(version)) {
 									chan.sendMessage(MessageCreateData.fromContent(prefix+"that doesn't look like the latest version of NTM:CE, please upgrade unless I'm stupid")).queue();
+									chan.sendMessage(MessageCreateData.fromContent(prefix+"tell me to ignore ntm version if I'm wrong")).queue();
 									prefix = "also ";
 								}
 								break;
@@ -604,9 +631,9 @@ public class SillyBot {
 					if (containsRegexes(msg,"he","convert to") && containsRegexes(msg,"rf","fe"))
 						chan.sendMessage(append(Responses.qnaConverter(),"\n\nAlso please don't ask questions in https://discord.com/channels/1241479482964054057/1273376849283645470.").build()).queue();
 				}
-				tryQuickScan(data,data,chan,false,false);
+				tryQuickScan(data,data,chan,false,false,false);
 			} else if ((chan.getName().equalsIgnoreCase("general") || chan.getName().equalsIgnoreCase("ntm-questions") || chan.getName().equalsIgnoreCase("bot-commands")) && (type == ServerType.DEVELOPMENT || type == ServerType.CURSED)) {
-				tryQuickScan(data,data,chan,false,false);
+				tryQuickScan(data,data,chan,false,false,false);
 			}
 		}
 		public static void tryQNA(MessageReceivedEvent event,ServerType type,Message data) {
@@ -619,7 +646,7 @@ public class SillyBot {
 						if (forum.getName().equalsIgnoreCase("issues-and-qna"))
 							answerQNA(data,thread,event);
 					} else
-						tryQuickScan(data,data,chan,false,false);
+						tryQuickScan(data,data,chan,false,false,false);
 				}
 			}
 		}
@@ -629,7 +656,7 @@ public class SillyBot {
 			if (threadContainsRegexes(title,msg,"he") && threadContainsRegexes(title,msg,"rf","fe"))
 				thread.sendMessage(append(Responses.qnaConverter(),"\n\nHope this helps!").build()).queue();
 			else if (threadContainsRegexes(title,msg,"!crash")) {
-				if (!tryQuickScan(data,data,thread,false,true))
+				if (!tryQuickScan(data,data,thread,false,true,false))
 					thread.sendMessage(MessageCreateData.fromContent("please provide logs if you haven't, we cannot do anything without it")).queue();
 			}
 		}
