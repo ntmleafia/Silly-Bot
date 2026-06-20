@@ -126,22 +126,26 @@ public class SillyBot {
 				if (ref == null || ref.getAuthor() == self) {
 					boolean checkNeeded = ref == null;
 					Message target = null;
-					try {
-						for (Message src : chan.getHistory().retrievePast(10).submit().get()) {
-							if (checkNeeded) {
-								if (src.getAuthor() == self)
-									checkNeeded = false;
-								else
-									continue;
+					Message pivot = ref == null ? data : ref;
+					if (!pivot.getAttachments().isEmpty() || !pivot.getEmbeds().isEmpty())
+						target = pivot;
+					else {
+						try {
+							for (Message src : chan.getHistoryBefore(pivot,10).submit().get().getRetrievedHistory()) {
+								if (checkNeeded) {
+									if (src.getAuthor() == self)
+										checkNeeded = false;
+									else
+										continue;
+								}
+								if (src.getContentDisplay().equals("?quickscan"))
+									src = src.getReferencedMessage();
+								if (src != null && (!src.getAttachments().isEmpty() || !src.getEmbeds().isEmpty())) {
+									target = src;
+									break;
+								}
 							}
-							if (src.getContentDisplay().equals("?quickscan"))
-								src = src.getReferencedMessage();
-							if (src != null && (!src.getAttachments().isEmpty() || !src.getEmbeds().isEmpty())) {
-								target = src;
-								break;
-							}
-						}
-					} catch (Exception ignored) {
+						} catch (Exception ignored) { }
 					}
 					if (target != null) {
 						tryQuickScan(data,target,chan,true,true,true);
