@@ -3,6 +3,7 @@ package com.leafia.sillybot;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.JDABuilder;
 import net.dv8tion.jda.api.OnlineStatus;
+import net.dv8tion.jda.api.Permission;
 import net.dv8tion.jda.api.entities.*;
 import net.dv8tion.jda.api.entities.Message.Attachment;
 import net.dv8tion.jda.api.entities.channel.concrete.ForumChannel;
@@ -37,8 +38,8 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class SillyBot {
-	private static final boolean debug = true;
-	private static final boolean enableAI = true;
+	private static final boolean debug = false;
+	private static boolean enableAI = true;
 	private static final Logger logger = LoggerFactory.getLogger(SillyBot.class);
 	private static JDA jda;
 	private static final File tokenDir = new File("D:\\sillybot_token.txt"); // top secret!!
@@ -116,6 +117,26 @@ public class SillyBot {
 				return;
 			Message data = event.getMessage();
 			String message = data.getContentDisplay();
+
+			if (message.equals("?disableai")) {
+				if (event.getMember() != null) {
+					if (event.getMember().hasPermission(Permission.ADMINISTRATOR)) {
+						chan.sendMessage("disabled AI").queue();
+						enableAI = false;
+						return;
+					}
+				}
+			}
+			if (message.equals("?enableai")) {
+				if (event.getMember() != null) {
+					if (event.getMember().hasPermission(Permission.ADMINISTRATOR)) {
+						chan.sendMessage("enabled AI").queue();
+						enableAI = true;
+						return;
+					}
+				}
+			}
+
 			if (message.toLowerCase().contains("llce") || message.toLowerCase().contains("legacy lce"))
 				data.addReaction(Emoji.fromUnicode("\uD83D\uDE4F")).queue();
 
@@ -224,7 +245,11 @@ public class SillyBot {
 						chan.sendMessage("mrow~").queue();
 					else if (enableAI) {
 						SillyBot.sendTyping();
-						String s = AICore.ask(data.getContentRaw(),data.getAuthor().getEffectiveName());
+						String msg = data.getContentRaw();
+						if (ref != null) {
+							msg = "[in reply to "+ref.getContentRaw()+"]:\n"+msg;
+						}
+						String s = AICore.ask(msg,data.getAuthor().getEffectiveName());
 						event.getMessage().reply(s).queue();
 						lastTyping = Long.MIN_VALUE;
 					}
