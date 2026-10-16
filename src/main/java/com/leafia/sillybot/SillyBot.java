@@ -246,9 +246,8 @@ public class SillyBot {
 					else if (enableAI) {
 						SillyBot.sendTyping();
 						String msg = data.getContentRaw();
-						if (ref != null) {
-							msg = "[in reply to "+ref.getContentRaw()+"]:\n"+msg;
-						}
+						if (ref != null)
+							msg = "[in reply to "+ref.getAuthor().getEffectiveName()+" saying "+ref.getContentRaw()+"]:\n"+msg;
 						String s = AICore.ask(msg,data.getAuthor().getEffectiveName());
 						event.getMessage().reply(s).queue();
 						lastTyping = Long.MIN_VALUE;

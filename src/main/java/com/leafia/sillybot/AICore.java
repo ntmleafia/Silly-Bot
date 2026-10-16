@@ -130,7 +130,7 @@ public class AICore {
 			System.out.println(res);
 		history.add(start+"User: ["+userName+"]:\n" + userMessage + "\n"+end);
 		history.add(start+"Mrowia:\n"+res + "\n"+end);
-		while (history.size() > 200*2)
+		while (history.size() > 20*2)
 			history.removeFirst();
 		return res;
 	}
