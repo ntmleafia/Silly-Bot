@@ -37,7 +37,8 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class SillyBot {
-	private static final boolean debug = false;
+	private static final boolean debug = true;
+	private static final boolean enableAI = true;
 	private static final Logger logger = LoggerFactory.getLogger(SillyBot.class);
 	private static JDA jda;
 	private static final File tokenDir = new File("D:\\sillybot_token.txt"); // top secret!!
@@ -58,6 +59,17 @@ public class SillyBot {
 				return ServerType.CURSED;
 		}
 		return ServerType.UNKNOWN;
+	}
+	public static MessageChannelUnion lastChan = null;
+	public static long lastTyping = Long.MIN_VALUE;
+	public static void sendTyping() {
+		if (lastChan != null) {
+			long cur = System.currentTimeMillis();
+			if (cur > lastTyping+4000) {
+				lastChan.sendTyping().queue();
+				lastTyping = cur;
+			}
+		}
 	}
 	public static class Responses {
 		public static Map<String,Supplier<MessageCreateBuilder>> tags = new HashMap<>();
@@ -99,6 +111,7 @@ public class SillyBot {
 			ServerType type = getServerType(event.getGuild());
 			if (!type.equals(ServerType.DEVELOPMENT) && debug) return;
 			MessageChannelUnion chan = event.getChannel();
+			lastChan = chan;
 			if (type.equals(ServerType.DEVELOPMENT) && chan.getName().equalsIgnoreCase("resources"))
 				return;
 			Message data = event.getMessage();
@@ -106,12 +119,16 @@ public class SillyBot {
 			if (message.toLowerCase().contains("llce") || message.toLowerCase().contains("legacy lce"))
 				data.addReaction(Emoji.fromUnicode("\uD83D\uDE4F")).queue();
 
-			if (data.getContentRaw().contains("<@1514985371711176906>")) {
-				chan.sendMessage("mrow~").queue();
+			/*if (data.getContentRaw().contains("<@1514985371711176906>")) {
+				if (data.getContentRaw().equals("<@1514985371711176906>"))
+					chan.sendMessage("mrow~").queue();
+				else {
+					String s = AICore.ask(data.getContentRaw(),data.getAuthor().getEffectiveName());
+				}
 				return;
-			}
+			}*/
 			Message ref = data.getReferencedMessage();
-			if (ref != null) {
+			/*if (ref != null) {
 				if (ref.getAuthor().equals(self)) {
 					if (message.toLowerCase().equals("thx") || message.toLowerCase().equals("ty") || message.toLowerCase().contains("thank")) {
 						chan.sendMessage("you're welcome :3c").queue();
@@ -121,7 +138,7 @@ public class SillyBot {
 						return;
 					}
 				}
-			}
+			}*/
 			if (message.toLowerCase().contains("ignore") && message.toLowerCase().contains("ver")) {
 				boolean scanAnyway = false;
 				boolean checkNeeded = ref == null;
@@ -201,6 +218,20 @@ public class SillyBot {
 						chan.sendMessage("no tag "+tag+" found").queue();
 				}
 				return;
+			} else {
+				if (data.getContentRaw().contains("<@1514985371711176906>") || (ref != null && ref.getAuthor().equals(self))) {
+					if (data.getContentRaw().equals("<@1514985371711176906>"))
+						chan.sendMessage("mrow~").queue();
+					else if (enableAI) {
+						SillyBot.sendTyping();
+						String s = AICore.ask(data.getContentRaw(),data.getAuthor().getEffectiveName());
+						event.getMessage().reply(s).queue();
+						lastTyping = Long.MIN_VALUE;
+					}
+					return;
+				}
+				if (enableAI)
+					AICore.logMessage(message,data.getAuthor().getEffectiveName());
 			}
 			//tryConversation(event,data);
 			//if (true) return;
@@ -260,7 +291,7 @@ public class SillyBot {
 				if (target.getAuthor().equals(self))
 					chan.sendMessage("a-are you scanning ME?!").queue();
 				else {
-					if (target.getContentDisplay().contains("scan")) {
+					if (target.getContentDisplay().toLowerCase().contains("scan")) {
 						long id = target.getAuthor().getIdLong();
 						long var = id%10;
 						switch((int)var) {
@@ -414,7 +445,7 @@ public class SillyBot {
 			if (!isCrash) {
 				if (wasForced)
 					chan.sendMessage(MessageCreateData.fromContent("I couldn't find any crash information in it")).queue();
-				if (diagnoseErrors(chan,errorDatas,wasForced))
+				if (diagnoseErrors(chan,errorDatas,wasForced,modlist))
 					return LogDiagnosisReturnCode.INVALID_ANSWERED;
 				return LogDiagnosisReturnCode.INVALID;
 			}
@@ -505,7 +536,7 @@ public class SillyBot {
 					if (prefix.isEmpty()) {
 						if (shouldSendSuccessMessage)
 							chan.sendMessage(MessageCreateData.fromContent("I did a quick scan for common causes, couldn't find any issues there")).queue();
-						if (diagnoseErrors(chan,errorDatas,wasForced))
+						if (diagnoseErrors(chan,errorDatas,wasForced,modlist))
 							return LogDiagnosisReturnCode.ANSWERED;
 						return LogDiagnosisReturnCode.SUCCESS;
 					}
@@ -524,7 +555,7 @@ public class SillyBot {
 			out[1] = s.substring(index+1);
 			return out;
 		}
-		public static boolean diagnoseErrors(MessageChannel chan,List<ErrorData> errorDatas,boolean wasForced) {
+		public static boolean diagnoseErrors(MessageChannel chan,List<ErrorData> errorDatas,boolean wasForced,Map<String,ModInfo> modlist) {
 			boolean first = true;
 			boolean responded = false;
 			for (ErrorData edat : errorDatas) {
@@ -568,6 +599,8 @@ public class SillyBot {
 						} else if (name.equals("NoClassDefFoundError")) {
 							if (message.contains("zone/rong/mixinbooter"))
 								sendMsg = "it seems like you're missing [MixinBooter](https://www.curseforge.com/minecraft/mc-mods/mixin-booter)";
+							else if (modlist.containsKey("leafia"))
+								sendMsg = "you have Leafia's Cursed Addon, which makes it harder to do version checks.\nmake sure you have latest one from [Github](https://github.com/ntmleafia/NTM-Cursed-Addon/releases)";
 						}
 					}
 				}
@@ -631,7 +664,7 @@ public class SillyBot {
 		/// why do people do this?
 		public static void tryAnswerGeneral(MessageReceivedEvent event,ServerType type,Message data) {
 			MessageChannelUnion chan = event.getChannel();
-			if (chan.getName().equalsIgnoreCase("warfactory-general") && (type == ServerType.DEVELOPMENT || type == ServerType.WARFACTORY)) {
+			if ((chan.getName().equalsIgnoreCase("warfactory-general") || chan.getName().equalsIgnoreCase("ntm-general")) && (type == ServerType.DEVELOPMENT || type == ServerType.WARFACTORY)) {
 				String msg = data.getContentDisplay().toLowerCase();
 				if (containsByFuncs(msg,QuestionDetector::howTo,QuestionDetector::anyWayTo)) {
 					if (containsRegexes(msg,"he","convert to") && containsRegexes(msg,"rf","fe"))
@@ -750,6 +783,7 @@ public class SillyBot {
 			jda.updateCommands()
 					.addCommands(Commands.message("Quick Scan"))
 					.queue();*/ // fuck you forget it
+			AICore.init();
 		} catch (Exception e) {
 			throw new RuntimeException(e);
 		}
