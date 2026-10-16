@@ -71,6 +71,12 @@ public class AICore {
 		if (llm == null) {
 			return "I'm not ready yet!";
 		}
+		userMessage = userMessage.replace("<s>","");
+		userMessage = userMessage.replace("</s>","");
+		userMessage = userMessage.replace("[INST]","");
+		userMessage = userMessage.replace("[/INST]","");
+		userMessage = userMessage.replace(start,"");
+		userMessage = userMessage.replace(end,"");
 		userList.add("User ["+userName+"]:");
 		StringBuilder promptText = getStringBuilder(userMessage,userName);
 		List<String> blockedList = new ArrayList<>(
