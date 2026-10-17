@@ -76,6 +76,14 @@ public class SillyBot {
 		public static Map<String,Supplier<MessageCreateBuilder>> tags = new HashMap<>();
 		static {
 			tags.put("qna_converter",Responses::qnaConverter);
+			tags.put("qna_siphon",Responses::qnaSiphon);
+		}
+		public static MessageCreateBuilder qnaSiphon() {
+			return new MessageCreateBuilder()
+					.setContent(
+							"You can use the Siphon item and either a barrel, universal fluid tank or a pipette in your inventory."
+							+"\nUse pipette if it's less than 1000mB you have to get out of your machine."
+					);
 		}
 		public static MessageCreateBuilder qnaConverter() {
 			return new MessageCreateBuilder()
@@ -693,6 +701,8 @@ public class SillyBot {
 				if (containsByFuncs(msg,QuestionDetector::howTo,QuestionDetector::anyWayTo)) {
 					if (containsRegexes(msg,"he","convert to") && containsRegexes(msg,"rf","fe"))
 						chan.sendMessage(append(Responses.qnaConverter(),"\n\nAlso please don't ask questions in https://discord.com/channels/1241479482964054057/1273376849283645470.").build()).queue();
+					if (containsRegexes(msg,"chem.*plant") && containsRegexes(msg,"fluid","fluids") && containsRegexes(msg,"extract","out"))
+						chan.sendMessage(append(Responses.qnaSiphon(),"\n\nAlso please don't ask questions in https://discord.com/channels/1241479482964054057/1273376849283645470.").build()).queue();
 				}
 				tryQuickScan(data,data,chan,false,false,false);
 			} else if ((chan.getName().equalsIgnoreCase("general") || chan.getName().equalsIgnoreCase("ntm-questions") || chan.getName().equalsIgnoreCase("bot-commands")) && (type == ServerType.DEVELOPMENT || type == ServerType.CURSED)) {
@@ -718,6 +728,8 @@ public class SillyBot {
 			String title = thread.getName();
 			if (threadContainsRegexes(title,msg,"he") && threadContainsRegexes(title,msg,"rf","fe"))
 				thread.sendMessage(append(Responses.qnaConverter(),"\n\nHope this helps!").build()).queue();
+			else if (containsRegexes(msg,"chem.*plant") && containsRegexes(msg,"fluid","fluids") && containsRegexes(msg,"extract","out"))
+				thread.sendMessage(append(Responses.qnaSiphon(),"\n\nHope this helps!").build()).queue();
 			else if (threadContainsRegexes(title,msg,"!crash")) {
 				if (!tryQuickScan(data,data,thread,false,true,false))
 					thread.sendMessage(MessageCreateData.fromContent("please provide logs if you haven't, we cannot do anything without it")).queue();

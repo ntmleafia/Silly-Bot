@@ -67,6 +67,7 @@ public class AICore {
 	public static final String start = "<|im_start|>";
 	public static final String end = "<|im_end|>";
 	private static boolean logging = false;
+	public static Pattern linkPat = Pattern.compile(".*(http?s://\\S+).*");
 	public static String ask(String userMessage,String userName) {
 		if (llm == null) {
 			return "I'm not ready yet!";
@@ -77,7 +78,7 @@ public class AICore {
 		userMessage = userMessage.replace("[/INST]","");
 		userMessage = userMessage.replace(start,"");
 		userMessage = userMessage.replace(end,"");
-		userList.add("User ["+userName+"]:");
+		userList.add("["+userName+"]:");
 		StringBuilder promptText = getStringBuilder(userMessage,userName);
 		List<String> blockedList = new ArrayList<>(
 				Arrays.asList("---","User:")
@@ -125,6 +126,15 @@ public class AICore {
 			res = res.substring(2);
 		if (res.startsWith(","))
 			res = res.substring(1);
+		while (true) {
+			Matcher matcher = linkPat.matcher(res);
+			if (matcher.matches()) {
+				String link = matcher.group(1);
+				res = res.replace(link,"[Hyperlink Blocked]");
+				System.out.println("Blocked link "+link);
+			} else
+				break;
+		}
 		res = res.trim();
 		if (logging)
 			System.out.println(res);
