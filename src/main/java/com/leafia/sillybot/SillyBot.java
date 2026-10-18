@@ -149,11 +149,21 @@ public class SillyBot {
 					chan.sendMessage("switching to fast model").queue();
 					AICore.switchModel(LLMType.FAST);
 					chan.sendMessage("switched to fast model").queue();
+					return;
 				}
 				if (message.equals("?slowai")) {
 					chan.sendMessage("switching to slow model").queue();
 					AICore.switchModel(LLMType.SLOW);
 					chan.sendMessage("switched to slow model").queue();
+					return;
+				}
+				if (message.startsWith("?memory")) {
+					AICore.memory = Integer.parseInt(message.substring("?memory ".length()));
+					return;
+				}
+				if (message.equals("?reloadfursona")) {
+					AICore.reloadFursona();
+					return;
 				}
 			}
 

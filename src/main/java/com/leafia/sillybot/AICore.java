@@ -21,7 +21,7 @@ public class AICore {
 		boolean SetDllDirectoryW(String path);
 	}
 	public static final File fursona = new File("../fursona1.txt");
-	public static final String context;
+	public static String context;
 	public static final Set<String> userList = new HashSet<>();
 	public static String[] toArray(List<String> list) {
 		String[] a = new String[list.size()];
@@ -30,12 +30,15 @@ public class AICore {
 		return a;
 	}
 	public static final List<String> hardBlockedList = new ArrayList<>();
-	static {
+	public static void reloadFursona() {
 		try {
 			context = Files.readString(fursona.toPath().toAbsolutePath());
 		} catch (IOException e) {
 			throw new RuntimeException(e);
 		}
+	}
+	static {
+		reloadFursona();
 		hardBlockedList.addAll(Arrays.asList(
 				"You are Mrowia","Mrowia:"
 		));
@@ -236,10 +239,11 @@ public class AICore {
 		List<String> history = getHistory(guild);
 		history.add(start_user+"User: ["+userName+"]:\n" + userMessage + "\n"+end_user);
 		history.add(start_ai+"Mrowia:\n"+res + "\n"+end_ai);
-		while (history.size() > 20*2)
+		while (history.size() > memory*2)
 			history.removeFirst();
 		return res;
 	}
+	public static int memory = 20;
 
 	public static void logMessage(String guild,String userMessage,String userName) {
 		List<String> history = getHistory(guild);
