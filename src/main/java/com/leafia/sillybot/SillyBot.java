@@ -1,5 +1,6 @@
 package com.leafia.sillybot;
 
+import com.leafia.sillybot.AICore.LLMType;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.JDABuilder;
 import net.dv8tion.jda.api.OnlineStatus;
@@ -31,7 +32,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.*;
 import java.util.Map.Entry;
-import java.util.concurrent.ExecutionException;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.regex.Matcher;
@@ -142,6 +142,18 @@ public class SillyBot {
 						enableAI = true;
 						return;
 					}
+				}
+			}
+			if (event.getAuthor().getId().equals("536477369238814721")) {
+				if (message.equals("?fastai")) {
+					chan.sendMessage("switching to fast model").queue();
+					AICore.switchModel(LLMType.FAST);
+					chan.sendMessage("switched to fast model").queue();
+				}
+				if (message.equals("?slowai")) {
+					chan.sendMessage("switching to slow model").queue();
+					AICore.switchModel(LLMType.SLOW);
+					chan.sendMessage("switched to slow model").queue();
 				}
 			}
 
@@ -256,14 +268,14 @@ public class SillyBot {
 						String msg = data.getContentRaw();
 						if (ref != null)
 							msg = "[in reply to "+ref.getAuthor().getEffectiveName()+" saying "+ref.getContentRaw()+"]:\n"+msg;
-						String s = AICore.ask(msg,data.getAuthor().getEffectiveName());
+						String s = AICore.ask(data.getChannelId(),msg,data.getAuthor().getEffectiveName());
 						event.getMessage().reply(s).queue();
 						lastTyping = Long.MIN_VALUE;
 					}
 					return;
 				}
 				if (enableAI)
-					AICore.logMessage(message,data.getAuthor().getEffectiveName());
+					AICore.logMessage(data.getChannelId(),message,data.getAuthor().getEffectiveName());
 			}
 			//tryConversation(event,data);
 			//if (true) return;
