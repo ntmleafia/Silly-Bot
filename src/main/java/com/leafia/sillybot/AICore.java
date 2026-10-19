@@ -1,8 +1,13 @@
 package com.leafia.sillybot;
 
+import com.google.gson.*;
+import com.leafia.sillybot.AITools.InvalidArgumentException;
+import com.leafia.sillybot.AITools.WrongArgumentsException;
 import com.sun.jna.Library;
 import com.sun.jna.Native;
 import de.kherud.llama.*;
+import net.dv8tion.jda.api.entities.channel.unions.MessageChannelUnion;
+import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.BufferedReader;
@@ -115,12 +120,12 @@ public class AICore {
 	}
 	public enum LLMType {
 		FAST("TheDrummer_Snowpiercer-15B-v4-Q4_K_L",10,
-				"<|im_start|>","<|im_start|>","<|im_start|>",
-				"<|im_end|>","<|im_end|>","<|im_end|>"
+				"<|im_start|>","<|im_start|>tool","<|im_start|>","<|im_start|>",
+				"<|im_end|>","<|im_end|>tool","<|im_end|>","<|im_end|>"
 		),
 		SLOW("mrow",15,
-				"<|system|>","<|user|>","<|assistant|>",
-				"","",""
+				"<|system|>","<|tool|>","<|user|>","<|assistant|>",
+				"","","",""
 		),
 		;
 		public final String modelName;
@@ -130,9 +135,11 @@ public class AICore {
 		public final String end_ai;
 		public final String start_sys;
 		public final String end_sys;
+		public final String start_tool;
+		public final String end_tool;
 		public final int layers;
 
-		LLMType(String modelName,int layers,String start_sys,String start_user,String start_ai,String end_sys,String end_user,String end_ai) {
+		LLMType(String modelName,int layers,String start_sys,String start_tool,String start_user,String start_ai,String end_sys,String end_tool,String end_user,String end_ai) {
 			this.modelName = modelName;
 			this.start_user = start_user;
 			this.end_user = end_user;
@@ -140,11 +147,53 @@ public class AICore {
 			this.end_ai = end_ai;
 			this.start_sys = start_sys;
 			this.end_sys = end_sys;
+			this.start_tool = start_tool;
+			this.end_tool = end_tool;
 			this.layers = layers;
 		}
 	}
 	public static LLMType curModel = LLMType.FAST;
 	private static boolean logging = false;
+	public static final String JSON_SCHEMA = """
+		{
+		  "oneOf": [
+		    {
+		      "type": "array",
+		      "minItems": 1,
+		      "items": {
+		        "type": "string"
+		      }
+		    },
+		    {
+		      "type": "array",
+		      "minItems": 1,
+		      "items": {
+		        "type": "object",
+		        "properties": {
+		          "tool": { "type": "string" },
+		          "args": {
+		            "type": "array",
+		            "items": { "type": "string" }
+		          }
+		        },
+		        "required": ["tool", "args"],
+		        "additionalProperties": false
+		      }
+		    }
+		  ]
+		}
+		""";
+	public static final String jsonGrammar = LlamaModel.jsonSchemaToGrammar(JSON_SCHEMA);
+	public static final String TOOLLESS_SCHEMA = """
+		{
+		  "type": "array",
+		  "minItems": 1,
+		  "items": {
+		    "type": "string"
+		  }
+		}
+		""";
+	public static final String riggedGrammar = LlamaModel.jsonSchemaToGrammar(TOOLLESS_SCHEMA);
 
 	public static final String start_sys = "<[PROMPT SYS]>";
 	public static final String end_sys = "<[/PROMPT SYS]>";
@@ -152,9 +201,13 @@ public class AICore {
 	public static final String end_user = "<[/PROMPT USER]>";
 	public static final String start_ai = "<[PROMPT AI]>";
 	public static final String end_ai = "<[/PROMPT AI]>";
+	public static final String start_tool = "<[PROMPT TOOL]>";
+	public static final String end_tool = "<[/PROMPT TOOL]>";
 
 	public static Pattern linkPat = Pattern.compile(".*(http?s://\\S+).*");
-	public static String ask(String guild,String userMessage,String userName) {
+	public static final Gson gson = new Gson();
+	public static int maxTries = 5;
+	public static String ask(MessageReceivedEvent evt,String guild,String userMessage,String userName) {
 		if (llm == null)
 			return "I'm not ready yet!";
 		userMessage = userMessage.replace("<s>","");
@@ -168,62 +221,162 @@ public class AICore {
 		userMessage = userMessage.replace(start_ai,"");
 		userMessage = userMessage.replace(end_ai,"");
 		for (LLMType value : LLMType.values())
-			userMessage = userMessage.replaceAll("<\\|.*\\|>","");
+			userMessage = userMessage.replaceAll("<\\|\\D\\|>","");
 		userList.add("["+userName+"]:");
-		StringBuilder promptText = getStringBuilder(guild,userMessage,userName);
 		List<String> blockedList = new ArrayList<>(
-				Arrays.asList("---","User:","[/INST]")
+				Arrays.asList("---","User:","[/INST]","[INST]")
 		);
 		blockedList.addAll(hardBlockedList);
 		blockedList.addAll(userList);
 		LlamaModelWrapper curLLM = llm;
-		InferenceParameters prompt =
-				new InferenceParameters(promptText.toString()
-						.replace(start_sys,curModel.start_sys).replace(end_sys,curModel.end_sys)
-						.replace(start_user,curModel.start_user).replace(end_user,curModel.end_user)
-						.replace(start_ai,curModel.start_ai).replace(end_ai,curModel.end_ai)
-				)
-						.setTemperature(0.7f)
-						.setStopStrings(toArray(blockedList))
-						.setNPredict(128);
 		if (logging)
 			System.out.println("Generating response...");
-		StringBuilder response = new StringBuilder();
-		for (LlamaOutput output : curLLM.generate(prompt)) {
-			SillyBot.sendTyping();
-			String token = output.toString();
-			response.append(token);
-			if (response.toString().length() > 3000) {
-				response = new StringBuilder("ERROR! o-o\nReason: Exceeded max length!");
-				break;
+
+		boolean enableGrammar = true;
+
+		String finalResponse = "too hard for me! >-<\n-# This is an error message!";
+		StringBuilder base = new StringBuilder();
+		for (int tries = 0; tries < maxTries; tries++) {
+			if (tries == maxTries-1)
+				base.append("You have reached maximum uses of tools. You cannot use tools any more.");
+			StringBuilder promptText = getStringBuilder(guild,userMessage,userName,enableGrammar,base);
+			InferenceParameters prompt =
+					new InferenceParameters(promptText.toString()
+							.replace(start_sys,curModel.start_sys).replace(end_sys,curModel.end_sys)
+							.replace(start_user,curModel.start_user).replace(end_user,curModel.end_user)
+							.replace(start_ai,curModel.start_ai).replace(end_ai,curModel.end_ai)
+							.replace(start_tool,curModel.start_tool).replace(end_tool,curModel.end_tool)
+					)
+							.setTemperature(0.7f)
+							.setStopStrings(toArray(blockedList))
+							.setNPredict(128);
+			if (enableGrammar)
+				prompt.setGrammar(tries == maxTries-1 ? riggedGrammar : jsonGrammar);
+
+			StringBuilder response = new StringBuilder();
+			if (!enableGrammar)
+				response.append("[");
+			for (LlamaOutput output : curLLM.generate(prompt)) {
+				SillyBot.sendTyping();
+				String token = output.toString();
+				response.append(token);
+				if (response.toString().length() > 3000) {
+					response = new StringBuilder("ERROR! o-o\nReason: Exceeded max length!");
+					break;
+				}
+				int i = checkForBlocked(response.toString());
+				int i2 = checkForUserRegex(response.toString());
+				if (logging) {
+					System.out.print(token);
+					System.out.flush();
+				}
+				if (i != -1) {
+					response.delete(i,response.length());
+					System.out.println("WARNING: stop strings did not work: had to terminate.");
+					break;
+				}
+				if (i2 != -1) {
+					response.delete(i2,response.length());
+					System.out.println("Terminated due to user regex detection.");
+					break;
+				}
 			}
-			int i = checkForBlocked(response.toString());
-			int i2 = checkForUserRegex(response.toString());
-			if (logging) {
-				System.out.print(token);
-				System.out.flush();
-			}
-			if (i != -1) {
-				response.delete(i,response.length());
-				System.out.println("WARNING: stop strings did not work: had to terminate.");
-				break;
-			}
-			if (i2 != -1) {
-				response.delete(i2,response.length());
-				System.out.println("Terminated due to user regex detection.");
-				break;
+			if (!curLLM.isOnline())
+				return "ERROR! o-o\nReason: LLM was requested to switch and had to be terminated!";
+			base.append(response).append(end_ai);
+			{
+				try {
+					JsonArray array = gson.fromJson(response.toString(),JsonArray.class);
+					int mode = -1;
+					for (JsonElement element : array) {
+						if (element instanceof JsonPrimitive) {
+							if (mode != -1 && mode != 0) {
+								mode = -2;
+								break;
+							} else mode = 0;
+						} else if (element instanceof JsonObject) {
+							if (mode != -1 && mode != 1) {
+								mode = -2;
+								break;
+							} else mode = 1;
+						}
+					}
+					if (mode == -2) {
+						base.append(start_tool).append("\nERROR: You cannot have both json string and json object in your output. Make it only string or objects.").append(end_tool);
+						continue;
+					}
+					if (mode == 0) {
+						StringBuilder builder = new StringBuilder();
+						for (JsonElement element : array) {
+							if (element instanceof JsonPrimitive prim) {
+								if (!builder.isEmpty())
+									builder.append("\n");
+								builder.append(prim.getAsString());
+							}
+						}
+						finalResponse = builder.toString();
+						break;
+					} else {
+						StringBuilder results = new StringBuilder("Results for the preceding assistant tool-call message:");
+						StringBuilder faileds = new StringBuilder("Errors:");
+						for (JsonElement element : array) {
+							if (element instanceof JsonObject obj) {
+								String tostr = element.toString();
+								if (!obj.has("tool") && !obj.has("args")) {
+									faileds.append("\n").append(tostr).append(": ERROR: Couldn't find \"tool\" and \"args\" values!");
+									continue;
+								}
+								if (!obj.has("tool")) {
+									faileds.append("\n").append(tostr).append(": ERROR: Couldn't find \"tool\" value!");
+									continue;
+								}
+								if (!obj.has("args")) {
+									faileds.append("\n").append(tostr).append(": ERROR: Couldn't find \"args\" value!");
+									continue;
+								}
+								String func = obj.get("tool").getAsString();
+								JsonArray args = obj.get("args").getAsJsonArray();
+								if (AITools.tools.containsKey(func)) {
+									List<String> list = new ArrayList<>();
+									for (JsonElement arg : args) {
+										if (arg instanceof JsonPrimitive prim)
+											list.add(prim.getAsString());
+										else
+											list.add(arg.toString());
+									}
+									try {
+										String result = AITools.tools.get(func).func.call(evt,list);
+										results.append("\n").append(tostr).append(": results: ").append(result);
+										//toolResponses.append("\n<QUICK DISCLAIMER: The tool ").append(func).append(" has been called successfully. Answer the user with the result above. Do NOT call again for the same purpose.>");
+									} catch (WrongArgumentsException exc) {
+										faileds.append("\n").append(tostr).append(": ERROR: Expected ").append(exc.required).append(" arguments, got ").append(exc.provided).append("!");
+									} catch (InvalidArgumentException e) {
+										faileds.append("\n").append(tostr).append(": ERROR: ").append(e.getMessage());
+									}
+								}
+							} else {
+								faileds.append("\nERROR: Detected an element in your JSON output that is neither a string (answer) or a json object (tool call)!");
+							}
+						}
+						results.append("\n").append(faileds);
+						results.append("\n\nRead every result above. You may call the same tool again with DIFFERENT arguments. Do not repeat an identical completed call. If you now have enough information, return [\"your final answer\"].");
+						base.append("\n").append(start_tool).append(results).append(end_tool);
+					}
+				} catch (JsonSyntaxException ignored) {
+					base.append("\nERROR: Malformed JSON, couldn't process your output!");
+				}
 			}
 		}
 		if (logging)
 			System.out.println("\nGeneration finished.");
-		if (!curLLM.isOnline())
-			return "ERROR! o-o\nReason: LLM was requested to switch and had to be terminated!";
+		/*
 		String res = response.toString();
 		res = res.replace("\n\n","\n");
 		if (res.startsWith("\\. "))
 			res = res.substring(2);
 		if (res.startsWith(","))
-			res = res.substring(1);
+			res = res.substring(1);*/
+		String res = finalResponse;
 		while (true) {
 			Matcher matcher = linkPat.matcher(res);
 			if (matcher.matches()) {
@@ -233,7 +386,7 @@ public class AICore {
 			} else
 				break;
 		}
-		res = res.trim();
+		//res = res.trim();
 		if (logging)
 			System.out.println(res);
 		List<String> history = getHistory(guild);
@@ -250,27 +403,48 @@ public class AICore {
 		history.add(start_user+"User: ["+userName+"]:\n" + userMessage + "\n"+end_user);
 	}
 
-	private static StringBuilder getStringBuilder(String guild,String userMessage,String userName) {
+	private static StringBuilder getStringBuilder(String guild,String userMessage,String userName,boolean enableGrammar,StringBuilder base) {
+
 		StringBuilder promptText = new StringBuilder();
 		{
-			promptText.append("[INST] "+start_sys);
+			promptText.append(start_sys);
 			promptText.append("Follow this character background and personality. ");
 			promptText.append("It is background information, not a question to answer.\n\n");
 			promptText.append("### Character information\n");
 			promptText.append(context);
-			promptText.append(end_sys+"\n\n");
+			promptText.append(end_sys+"\n");
+			{
+				promptText.append(start_sys+"""
+									You must output exactly one valid JSON array, with no text before or after it.
+									For a final answer, output strings in an array, like ["your response"].
+									If you respond multiple strings in an array like ["A","B","C"], it will be concentrated with a line break.
+									To call a tool, output an array containing one or more objects, each shaped like {"tool":"EXACT_TOOL_NAME","args":["argument 1","argument 2"]}.
+									Example tool call: [{"tool":"reverseOrder","args":["Hello","World"]}].
+									You may call the same tool multiple times with different arguments.
+									After a tool call, its result will be provided in a following tool message. Read all results before deciding what to do next.
+									Do not repeat an identical completed call; use its recorded result. Do not answer until you have enough information.
+									Only use tools when you think they're necessary. Do not needlessly call them.
+									Never put a final-answer string and tool-call objects in the same array.""");
+				promptText.append("\n");
+				promptText.append("\nAvailable tools for you:");
+				AITools.appendToolList(promptText);
+				promptText.append("\n"+end_sys+"\n");
+			}
 
+			// Include previous conversation turns.
 			List<String> history = getHistory(guild);
-			// Include previous conversation turns
-			for (String turn : history)
+			for (String turn : history) {
 				promptText.append(turn);
+			}
 
-			// Add the current user message
+			// Add the current user message.
 			promptText.append(start_user+"User: ["+userName+"]:\n");
 			promptText.append(userMessage);
-			promptText.append(end_user+"\n");
-			promptText.append(start_ai+"Mrowia:\n");
-			promptText.append("[/INST]");
+			promptText.append(end_user);
+			base.append("\n"+start_ai+"Mrowia (in JSON format):\n");
+			promptText.append(base);
+			if (!enableGrammar)
+				promptText.append("[");
 		}
 		return promptText;
 	}
@@ -285,17 +459,26 @@ public class AICore {
 			);
 			// doesnt detect my gpu without ts
 			try {
+				/*System.load("D:\\cuda\\bin\\x64\\cudart64_13.dll");
+				System.out.println("cudart loaded");
+
+				System.load("D:\\cuda\\bin\\x64\\nvJitLink_130_0.dll");
+				System.out.println("nvJitLink loaded");*/
+
 				System.load("D:\\cuda\\bin\\x64\\cublasLt64_13.dll");
 				System.out.println("cuBLASLt loaded");
 
 				System.load("D:\\cuda\\bin\\x64\\cublas64_13.dll");
 				System.out.println("cuBLAS loaded");
-
-				loadModel();
 			} catch (UnsatisfiedLinkError e) {
 				e.printStackTrace();
 			}
+			// kms
+			System.load(
+					"D:\\test_llama\\java-llama.cpp\\src\\main\\resources_linux_cuda\\de\\kherud\\llama\\Windows\\x86_64\\jllama.dll"
+			);
 
+			loadModel();
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
@@ -326,7 +509,7 @@ public class AICore {
 		BufferedReader reader = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8));
 		while (true) {
 			System.out.println("Ask:");
-			ask("0",reader.readLine(),"User");
+			ask(null,"0",reader.readLine(),"User");
 		}
 	}
 }

@@ -23,6 +23,7 @@ dependencies {
 
 	implementation 'de.kherud:llama:4.1.0'
 	implementation 'net.java.dev.jna:jna:5.17.0'
+	implementation 'com.google.code.gson:gson:2.8.0'
 }
 
 test {

@@ -278,7 +278,7 @@ public class SillyBot {
 						String msg = data.getContentRaw();
 						if (ref != null)
 							msg = "[in reply to "+ref.getAuthor().getEffectiveName()+" saying "+ref.getContentRaw()+"]:\n"+msg;
-						String s = AICore.ask(data.getChannelId(),msg,data.getAuthor().getEffectiveName());
+						String s = AICore.ask(event,data.getChannelId(),msg,data.getAuthor().getEffectiveName());
 						event.getMessage().reply(s).queue();
 						lastTyping = Long.MIN_VALUE;
 					}
