@@ -64,13 +64,15 @@ public class SillyBot {
 	public static MessageChannelUnion lastChan = null;
 	public static long lastTyping = Long.MIN_VALUE;
 	public static void sendTyping() {
-		if (lastChan != null) {
-			long cur = System.currentTimeMillis();
-			if (cur > lastTyping+4000) {
-				lastChan.sendTyping().queue();
-				lastTyping = cur;
+		try {
+			if (lastChan != null) {
+				long cur = System.currentTimeMillis();
+				if (cur > lastTyping+4000) {
+					lastChan.sendTyping().queue();
+					lastTyping = cur;
+				}
 			}
-		}
+		} catch (Exception ignored) { } // fuck off
 	}
 	public static class Responses {
 		public static Map<String,Supplier<MessageCreateBuilder>> tags = new HashMap<>();
@@ -146,22 +148,16 @@ public class SillyBot {
 				}
 			}
 			if (event.getAuthor().getId().equals("536477369238814721")) {
-				if (message.equals("?fastai")) {
-					chan.sendMessage("switching to fast model").queue();
-					AICore.switchModel(LLMType.FAST);
-					chan.sendMessage("switched to fast model").queue();
-					return;
-				}
-				if (message.equals("?fastaigpu")) {
-					chan.sendMessage("switching to fast model (with more gpu allocation)").queue();
-					AICore.switchModel(LLMType.FAST_GPU);
-					chan.sendMessage("switched to fast model (with more gpu allocation)").queue();
-					return;
-				}
-				if (message.equals("?slowai")) {
-					chan.sendMessage("switching to slow model").queue();
-					AICore.switchModel(LLMType.SLOW);
-					chan.sendMessage("switched to slow model").queue();
+				if (message.startsWith("?model ")) {
+					String modelName = message.substring("?model ".length());
+					try {
+						LLMType llm = AICore.LLMType.valueOf(modelName.toUpperCase());
+						chan.sendMessage("switching to "+modelName+" model").queue();
+						AICore.switchModel(llm);
+						chan.sendMessage("switched to "+modelName+" model").queue();
+					} catch (IllegalArgumentException ignored) {
+						chan.sendMessage("invalid model "+modelName).queue();
+					}
 					return;
 				}
 				if (message.startsWith("?memory")) {
@@ -287,6 +283,7 @@ public class SillyBot {
 						String msg = data.getContentRaw();
 						if (ref != null)
 							msg = "[in reply to "+ref.getAuthor().getEffectiveName()+" saying "+ref.getContentRaw()+"]:\n"+msg;
+						msg = msg.replace("<@1514985371711176906>","Mrowia,");
 						while (true) {
 							Matcher matcher = pingPattern.matcher(msg);
 							if (matcher.matches()) {

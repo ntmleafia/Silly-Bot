@@ -119,15 +119,23 @@ public class AICore {
 		return history.get(channelId);
 	}
 	public enum LLMType {
-		FAST("TheDrummer_Snowpiercer-15B-v4-Q4_K_L",10,
+		FAST("TheDrummer_Snowpiercer-15B-v4-Q4_K_L",10,5,
 				"<|im_start|>","<|im_start|>tool","<|im_start|>","<|im_start|>",
 				"<|im_end|>","<|im_end|>tool","<|im_end|>","<|im_end|>"
 		),
-		FAST_GPU("TheDrummer_Snowpiercer-15B-v4-Q4_K_L",30,
+		FAST_GPU("TheDrummer_Snowpiercer-15B-v4-Q4_K_L",30,5,
 				"<|im_start|>","<|im_start|>tool","<|im_start|>","<|im_start|>",
 				"<|im_end|>","<|im_end|>tool","<|im_end|>","<|im_end|>"
 		),
-		SLOW("mrow",15,
+		MED_0("TheDrummer_Snowpiercer-15B-v4-Q8_0",18,4,
+				"<|im_start|>","<|im_start|>tool","<|im_start|>","<|im_start|>",
+				"<|im_end|>","<|im_end|>tool","<|im_end|>","<|im_end|>"
+		),
+		MED_1("internlm2-chat-20b_Q6_K",18,4,
+				"<|im_start|>","<|im_start|>tool","<|im_start|>","<|im_start|>",
+				"<|im_end|>","<|im_end|>tool","<|im_end|>","<|im_end|>"
+		),
+		SLOW("mrow",15,3,
 				"<|system|>","<|tool|>","<|user|>","<|assistant|>",
 				"","","",""
 		),
@@ -142,8 +150,9 @@ public class AICore {
 		public final String start_tool;
 		public final String end_tool;
 		public final int layers;
+		public final int maxTries;
 
-		LLMType(String modelName,int layers,String start_sys,String start_tool,String start_user,String start_ai,String end_sys,String end_tool,String end_user,String end_ai) {
+		LLMType(String modelName,int layers,int maxTries,String start_sys,String start_tool,String start_user,String start_ai,String end_sys,String end_tool,String end_user,String end_ai) {
 			this.modelName = modelName;
 			this.start_user = start_user;
 			this.end_user = end_user;
@@ -154,9 +163,10 @@ public class AICore {
 			this.start_tool = start_tool;
 			this.end_tool = end_tool;
 			this.layers = layers;
+			this.maxTries = maxTries;
 		}
 	}
-	public static LLMType curModel = LLMType.FAST;
+	public static LLMType curModel = LLMType.MED_1;
 	private static boolean logging = false;
 	public static final String JSON_SCHEMA = """
 		{
@@ -210,7 +220,6 @@ public class AICore {
 
 	public static Pattern linkPat = Pattern.compile(".*(http?s://\\S+).*");
 	public static final Gson gson = new Gson();
-	public static int maxTries = 5;
 	public static String ask(MessageReceivedEvent evt,String guild,String userMessage,String userName) {
 		if (llm == null)
 			return "I'm not ready yet!";
@@ -226,6 +235,7 @@ public class AICore {
 		userMessage = userMessage.replace(end_ai,"");
 		for (LLMType value : LLMType.values())
 			userMessage = userMessage.replaceAll("<\\|\\D\\|>","");
+		System.out.println("Prompt: "+userMessage);
 		userList.add("["+userName+"]:");
 		List<String> blockedList = new ArrayList<>(
 				Arrays.asList("---","User:","[/INST]","[INST]")
@@ -240,9 +250,10 @@ public class AICore {
 
 		String finalResponse = "too hard for me! >-<\n-# This is an error message!";
 		StringBuilder base = new StringBuilder();
+		int maxTries = curModel.maxTries;
 		for (int tries = 0; tries < maxTries; tries++) {
 			if (tries == maxTries-1)
-				base.append("You have reached maximum uses of tools. You cannot use tools any more.");
+				base.append("\n").append("You have reached maximum uses of tools. You cannot use tools any more.");
 			StringBuilder promptText = getStringBuilder(guild,userMessage,userName,enableGrammar,base);
 			InferenceParameters prompt =
 					new InferenceParameters(promptText.toString()
@@ -352,6 +363,7 @@ public class AICore {
 										String result = AITools.tools.get(func).func.call(evt,list);
 										results.append("\n").append(tostr).append(": results: ").append(result);
 										//toolResponses.append("\n<QUICK DISCLAIMER: The tool ").append(func).append(" has been called successfully. Answer the user with the result above. Do NOT call again for the same purpose.>");
+										System.out.println("Used tool "+func+" with args "+args+", results: "+result);
 									} catch (WrongArgumentsException exc) {
 										faileds.append("\n").append(tostr).append(": ERROR: Expected ").append(exc.required).append(" arguments, got ").append(exc.provided).append("!");
 									} catch (Exception e) {
@@ -363,7 +375,7 @@ public class AICore {
 							}
 						}
 						results.append("\n").append(faileds);
-						results.append("\n\nRead every result above. You may call the same tool again with DIFFERENT arguments. Do not repeat an identical completed call. If you now have enough information, return [\"your final answer\"].");
+						results.append("\n\nRead every result above. You may call the same tool again with DIFFERENT arguments. Do not repeat an identical completed call. If you now have enough information, return [\"(your final answer)\"].");
 						base.append("\n").append(start_tool).append(results).append(end_tool);
 					}
 				} catch (JsonSyntaxException ignored) {
@@ -400,7 +412,7 @@ public class AICore {
 			history.removeFirst();
 		return res;
 	}
-	public static int memory = 20;
+	public static int memory = 200;
 
 	public static void logMessage(String guild,String userMessage,String userName) {
 		List<String> history = getHistory(guild);
@@ -440,6 +452,12 @@ public class AICore {
 			for (String turn : history) {
 				promptText.append(turn);
 			}
+
+			promptText.append(start_sys+"\n");
+			promptText.append("These messages above are previous messages sent in this chat.\n");
+			promptText.append("Only read them when necessary.\n");
+			promptText.append("**The prompt below is the real question being asked by a user.**\n");
+			promptText.append(end_sys+"\n");
 
 			// Add the current user message.
 			promptText.append(start_user+"User: ["+userName+"]:\n");
