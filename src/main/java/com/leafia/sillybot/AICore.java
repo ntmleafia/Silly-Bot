@@ -350,7 +350,7 @@ public class AICore {
 										//toolResponses.append("\n<QUICK DISCLAIMER: The tool ").append(func).append(" has been called successfully. Answer the user with the result above. Do NOT call again for the same purpose.>");
 									} catch (WrongArgumentsException exc) {
 										faileds.append("\n").append(tostr).append(": ERROR: Expected ").append(exc.required).append(" arguments, got ").append(exc.provided).append("!");
-									} catch (InvalidArgumentException e) {
+									} catch (Exception e) {
 										faileds.append("\n").append(tostr).append(": ERROR: ").append(e.getMessage());
 									}
 								}

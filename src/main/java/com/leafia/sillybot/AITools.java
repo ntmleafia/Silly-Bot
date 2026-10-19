@@ -68,8 +68,10 @@ public class AITools {
 					if (evt == null)
 						return "?";
 					String s = args.getFirst();
-					if (s.startsWith("<@"))
-						s = s.substring(2);
+					if (s.startsWith("<"))
+						s = s.substring(1);
+					if (s.startsWith("@"))
+						s = s.substring(1);
 					if (s.endsWith(">"))
 						s = s.substring(0,s.length()-1);
 					if (s.equals("1514985371711176906")) // itself

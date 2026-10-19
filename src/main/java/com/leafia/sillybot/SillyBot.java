@@ -114,6 +114,7 @@ public class SillyBot {
 		}
 	}
 	public static class SillyListener extends ListenerAdapter {
+		public static final Pattern pingPattern = Pattern.compile(".*(<@\\d+>).*");
 		@Override
 		public void onMessageReceived(MessageReceivedEvent event) {
 			if (event.getAuthor().equals(self)) return;
@@ -159,10 +160,12 @@ public class SillyBot {
 				}
 				if (message.startsWith("?memory")) {
 					AICore.memory = Integer.parseInt(message.substring("?memory ".length()));
+					chan.sendMessage("set memory to "+AICore.memory).queue();
 					return;
 				}
 				if (message.equals("?reloadfursona")) {
 					AICore.reloadFursona();
+					chan.sendMessage("reloaded fursona").queue();
 					return;
 				}
 			}
@@ -278,6 +281,20 @@ public class SillyBot {
 						String msg = data.getContentRaw();
 						if (ref != null)
 							msg = "[in reply to "+ref.getAuthor().getEffectiveName()+" saying "+ref.getContentRaw()+"]:\n"+msg;
+						while (true) {
+							Matcher matcher = pingPattern.matcher(msg);
+							if (matcher.matches()) {
+								String ping = matcher.group(1);
+								String username = "?";
+								try {
+									Member member = data.getGuild().getMemberById(ping.substring(2,ping.length()-1));
+									if (member != null)
+										username = member.getEffectiveName();
+								} catch (Exception ignored) {}
+								msg = msg.replaceAll(ping,username);
+							} else
+								break;
+						}
 						String s = AICore.ask(event,data.getChannelId(),msg,data.getAuthor().getEffectiveName());
 						event.getMessage().reply(s).queue();
 						lastTyping = Long.MIN_VALUE;
@@ -521,7 +538,7 @@ public class SillyBot {
 			Date date = new Date(System.currentTimeMillis());
 			if (modlist.containsKey("hbm")) {
 				String fn = modlist.get("hbm").filename.toLowerCase();
-				if (fn.matches("hbm\\d+\\.\\d+\\.\\d+a?(-g)?.*") || fn.matches("hbm.a.*") || fn.matches("hbm.g.*")) {
+				if (fn.matches("hbm.?\\d+\\.\\d+\\.\\d+a?(-g)?.*") || fn.matches("hbm.a.*") || fn.matches("hbm.g.*")) {
 					chan.sendMessage(MessageCreateData.fromContent("SOMEONE PLAYS RELOADED IN "+(date.getYear()+1900)+"??")).queue();
 					chan.sendMessage(MessageCreateData.fromContent("PLEASE get [Community Edition](https://www.curseforge.com/minecraft/mc-mods/hbm-nuclear-tech-mod-community-edition)")).queue();
 				} else if (fn.contains("waldemar") || fn.matches(".*well.forged.*")) {
