@@ -123,6 +123,10 @@ public class AICore {
 				"<|im_start|>","<|im_start|>tool","<|im_start|>","<|im_start|>",
 				"<|im_end|>","<|im_end|>tool","<|im_end|>","<|im_end|>"
 		),
+		FAST_GPU("TheDrummer_Snowpiercer-15B-v4-Q4_K_L",30,
+				"<|im_start|>","<|im_start|>tool","<|im_start|>","<|im_start|>",
+				"<|im_end|>","<|im_end|>tool","<|im_end|>","<|im_end|>"
+		),
 		SLOW("mrow",15,
 				"<|system|>","<|tool|>","<|user|>","<|assistant|>",
 				"","","",""

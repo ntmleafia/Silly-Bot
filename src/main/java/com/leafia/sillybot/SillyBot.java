@@ -152,6 +152,12 @@ public class SillyBot {
 					chan.sendMessage("switched to fast model").queue();
 					return;
 				}
+				if (message.equals("?fastaigpu")) {
+					chan.sendMessage("switching to fast model (with more gpu allocation)").queue();
+					AICore.switchModel(LLMType.FAST_GPU);
+					chan.sendMessage("switched to fast model (with more gpu allocation)").queue();
+					return;
+				}
 				if (message.equals("?slowai")) {
 					chan.sendMessage("switching to slow model").queue();
 					AICore.switchModel(LLMType.SLOW);
