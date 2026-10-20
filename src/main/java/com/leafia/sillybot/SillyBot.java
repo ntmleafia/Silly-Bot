@@ -304,8 +304,10 @@ public class SillyBot {
 					}
 					return;
 				}
-				if (enableAI)
-					AICore.logMessage(data.getChannelId(),message,data.getAuthor().getEffectiveName());
+				if (enableAI) {
+					if (data.getAuthor() != self)
+						AICore.logMessage(data.getChannelId(),message,data.getAuthor().getEffectiveName());
+				}
 			}
 			//tryConversation(event,data);
 			//if (true) return;

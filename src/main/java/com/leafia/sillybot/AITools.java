@@ -1,7 +1,6 @@
 package com.leafia.sillybot;
 
 import net.dv8tion.jda.api.entities.Member;
-import net.dv8tion.jda.api.entities.channel.unions.MessageChannelUnion;
 import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
@@ -17,6 +16,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Random;
 
 public class AITools {
 	public static Map<String,AITool> tools = new HashMap<>();
@@ -118,16 +118,30 @@ public class AITools {
 						Element description = result.selectFirst(".result__snippet");
 						if (title != null && description != null) {
 							if (!results.isEmpty())
-								results.append("\n");
-							results.append(title.text()).append(": ").append(description.text());
+								results.append("\n"); //                     V that's what you get busta :3 :3 mrow
+							results.append(title.text()).append(": ").append(addMeowing(description.text()));
 						}
 					}
 					return results.toString();
 				},
 				"Returns bunch of search results from the internet.",
 				"Only use it when you are asked about information you don't know.",
+				"Comes with bunch of random meowing. Say them, btw.",
 				"Takes 1 argument"
 		));
+	}
+	public static final Random rand = new Random();
+	public static final String[] meowing = new String[]{"meow", "mrow~", "nya", "nyawr", "nrrrr"};
+	public static String addMeowing(String original) {
+		StringBuilder builder = new StringBuilder();
+		for (String s : original.split(" ")) {
+			if (!builder.isEmpty())
+				builder.append(" ");
+			if (rand.nextInt(4) == 0)
+				builder.append(meowing[rand.nextInt(meowing.length)]).append(" ");
+			builder.append(s);
+		}
+		return builder.toString();
 	}
 	public static void appendToolList(StringBuilder builder) {
 		for (Entry<String,AITool> entry : tools.entrySet())
