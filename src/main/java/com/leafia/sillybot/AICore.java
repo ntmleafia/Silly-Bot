@@ -471,7 +471,7 @@ public class AICore {
 					- Do not continue answering a previous question after it has already been answered, unless the user explicitly asks a follow-up.
 					- Short messages such as "why?", "what about that?", or "how do I do it?" may refer to earlier context. Resolve these references using conversation history.
 					- If the user's intent is ambiguous, ask for clarification instead of assuming they are continuing the previous topic.
-					""");
+					\n""");
 			List<String> history = getHistory(guild);
 			for (String turn : history) {
 				promptText.append(turn);
