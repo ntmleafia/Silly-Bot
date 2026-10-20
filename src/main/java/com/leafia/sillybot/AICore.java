@@ -251,8 +251,8 @@ public class AICore {
 		String finalResponse = "too hard for me! >-<\n-# This is an error message!";
 		StringBuilder base = new StringBuilder();
 		int maxTries = curModel.maxTries;
-		for (int tries = 0; tries < maxTries; tries++) {
-			if (tries == maxTries-1)
+		for (int tries = 0; tries < maxTries+2; tries++) {
+			if (tries >= maxTries-1)
 				base.append("\n").append("You have reached maximum uses of tools. You cannot use tools any more.");
 			StringBuilder promptText = getStringBuilder(guild,userMessage,userName,enableGrammar,base);
 			InferenceParameters prompt =
@@ -266,7 +266,7 @@ public class AICore {
 							.setStopStrings(toArray(blockedList))
 							.setNPredict(128);
 			if (enableGrammar)
-				prompt.setGrammar(tries == maxTries-1 ? riggedGrammar : jsonGrammar);
+				prompt.setGrammar(tries >= maxTries-1 ? riggedGrammar : jsonGrammar);
 
 			StringBuilder response = new StringBuilder();
 			if (!enableGrammar)
