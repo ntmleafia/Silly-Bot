@@ -461,14 +461,16 @@ public class AICore {
 			}
 
 			// Include previous conversation turns.
+			promptText.append("The following messages are previous messages sent in this chat.\n");
+			promptText.append("Only read them when necessary.\n");
 			List<String> history = getHistory(guild);
 			for (String turn : history) {
 				promptText.append(turn);
 			}
 
 			promptText.append(start_sys+"\n");
-			promptText.append("These messages above are previous messages sent in this chat.\n");
-			promptText.append("Only read them when necessary.\n");
+			promptText.append("**The prompt below is the real question being asked by a user.**\n");
+			promptText.append("**The prompt below is the real question being asked by a user.**\n");
 			promptText.append("**The prompt below is the real question being asked by a user.**\n");
 			promptText.append(end_sys+"\n");
 
