@@ -220,21 +220,25 @@ public class AICore {
 
 	public static Pattern linkPat = Pattern.compile(".*(http?s://\\S+).*");
 	public static final Gson gson = new Gson();
+	public static String sanitize(String s) {
+		s = s.replace("<s>","");
+		s = s.replace("</s>","");
+		s = s.replace("[INST]","");
+		s = s.replace("[/INST]","");
+		s = s.replace(start_sys,"");
+		s = s.replace(end_sys,"");
+		s = s.replace(start_user,"");
+		s = s.replace(end_user,"");
+		s = s.replace(start_ai,"");
+		s = s.replace(end_ai,"");
+		//for (LLMType value : LLMType.values())
+		s = s.replaceAll("<\\|\\D\\|>","");
+		return s;
+	}
 	public static String ask(MessageReceivedEvent evt,String guild,String userMessage,String userName) {
 		if (llm == null)
 			return "I'm not ready yet!";
-		userMessage = userMessage.replace("<s>","");
-		userMessage = userMessage.replace("</s>","");
-		userMessage = userMessage.replace("[INST]","");
-		userMessage = userMessage.replace("[/INST]","");
-		userMessage = userMessage.replace(start_sys,"");
-		userMessage = userMessage.replace(end_sys,"");
-		userMessage = userMessage.replace(start_user,"");
-		userMessage = userMessage.replace(end_user,"");
-		userMessage = userMessage.replace(start_ai,"");
-		userMessage = userMessage.replace(end_ai,"");
-		for (LLMType value : LLMType.values())
-			userMessage = userMessage.replaceAll("<\\|\\D\\|>","");
+		userMessage = sanitize(userMessage);
 		System.out.println("Prompt: "+userMessage);
 		userList.add("["+userName+"]:");
 		List<String> blockedList = new ArrayList<>(
@@ -427,8 +431,8 @@ public class AICore {
 		if (logging)
 			System.out.println(res);
 		List<String> history = getHistory(guild);
-		history.add(start_user+"User: ["+userName+"]:\n" + userMessage + "\n"+end_user);
-		history.add(start_ai+res + "\n"+end_ai);
+		history.add(start_user+sanitize("User: ["+userName+"]:\n" + userMessage + "\n")+end_user);
+		history.add(start_ai+sanitize(res) + "\n"+end_ai);
 		while (history.size() > memory*2)
 			history.removeFirst();
 		return res;
@@ -437,7 +441,7 @@ public class AICore {
 
 	public static void logMessage(String guild,String userMessage,String userName) {
 		List<String> history = getHistory(guild);
-		history.add(start_user+"User: ["+userName+"]:\n" + userMessage + "\n"+end_user);
+		history.add(start_user+sanitize("User: ["+userName+"]:\n" + userMessage + "\n")+end_user);
 	}
 
 	private static StringBuilder getStringBuilder(String guild,String userMessage,String userName,boolean enableGrammar,StringBuilder base) {
